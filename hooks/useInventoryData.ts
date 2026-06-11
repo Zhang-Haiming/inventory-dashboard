@@ -4,8 +4,9 @@ import { v4 as uuidv4 } from 'uuid'
 import * as XLSX from 'xlsx'
 import type { InventoryData, StockInRow, StockOutRow, Thresholds } from '@/lib/types'
 
-// 判断是否在 Electron 环境
-const IS_ELECTRON = typeof window !== 'undefined' && 'electronAPI' in window
+// 判断是否在 Electron 环境（用 userAgent 更可靠，preload 注入前也能检测到）
+const IS_ELECTRON = typeof window !== 'undefined' &&
+  (window.navigator.userAgent.includes('Electron') || 'electronAPI' in window)
 
 // GitHub 配置
 // - Electron：构建时通过 NEXT_PUBLIC_ 内嵌
