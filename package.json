@@ -14,6 +14,7 @@
   "build": {
     "appId": "com.internal.inventory-dashboard",
     "productName": "库存看板",
+    "asar": false,
     "directories": {
       "output": "dist"
     },
@@ -24,7 +25,13 @@
       "node_modules/**/*",
       "package.json",
       "next.config.ts",
-      "postcss.config.mjs"
+      "postcss.config.mjs",
+      "!node_modules/.cache",
+      "!node_modules/.bin/tsc",
+      "!node_modules/.bin/tsserver",
+      "!**/*.ts",
+      "!**/*.tsx",
+      "!**/*.map"
     ],
     "win": {
       "target": "nsis",
