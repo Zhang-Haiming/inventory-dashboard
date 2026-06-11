@@ -35,7 +35,9 @@
     "mac": {
       "target": "dmg",
       "icon": "electron/icon.png",
-      "category": "public.app-category.business"
+      "category": "public.app-category.business",
+      "identity": null,
+      "notarize": false
     },
     "dmg": {
       "title": "库存看板"

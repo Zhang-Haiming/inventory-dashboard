@@ -73,6 +73,7 @@ jobs:
         run: npx electron-builder --mac --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false   # 禁止自动寻找签名证书
 
       - name: Upload Mac DMG
         uses: actions/upload-artifact@v4
@@ -112,8 +113,18 @@ jobs:
             | macOS | `库存看板-x.x.x.dmg` |
 
             ## 安装说明
-            - **Windows**：双击 `.exe` 安装，完成后打开桌面图标
-            - **macOS**：双击 `.dmg`，把应用拖到 Applications 文件夹
-            - **macOS 首次打开**：若提示"已损坏"，在终端运行 `xattr -cr /Applications/库存看板.app`
+
+            **Windows：**
+            1. 下载 `.exe`，双击安装
+            2. 完成后打开桌面「库存看板」图标
+
+            **macOS：**
+            1. 下载 `.dmg`，双击打开，把「库存看板」拖到 Applications
+            2. **首次打开必做**（因为未购买苹果开发者证书，需手动解除限制）：
+               打开「终端」，粘贴以下命令并回车：
+               ```
+               xattr -cr /Applications/库存看板.app
+               ```
+            3. 之后每次正常双击图标即可，无需重复上述操作
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
