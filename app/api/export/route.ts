@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { generateExcel } from '@/lib/excel'
 import type { StockInRow, StockOutRow } from '@/lib/types'

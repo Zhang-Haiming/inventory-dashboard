@@ -22,12 +22,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Next.js
-        run: npm run build
+      - name: Build Next.js (静态导出)
+        run: |
+          mv app/api app/_api_disabled
+          npm run build
+          mv app/_api_disabled app/api
         env:
-          GITHUB_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
-          GITHUB_OWNER: ${{ secrets.APP_GITHUB_OWNER }}
-          GITHUB_REPO: ${{ secrets.APP_GITHUB_REPO }}
+          NEXT_PUBLIC_GH_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
+          NEXT_PUBLIC_GH_OWNER: ${{ secrets.APP_GITHUB_OWNER }}
+          NEXT_PUBLIC_GH_REPO: ${{ secrets.APP_GITHUB_REPO }}
 
       - name: Build Electron (Windows)
         run: npx electron-builder --win --x64 --publish never
@@ -56,12 +59,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Next.js
-        run: npm run build
+      - name: Build Next.js (静态导出)
+        run: |
+          mv app/api app/_api_disabled
+          npm run build
+          mv app/_api_disabled app/api
         env:
-          GITHUB_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
-          GITHUB_OWNER: ${{ secrets.APP_GITHUB_OWNER }}
-          GITHUB_REPO: ${{ secrets.APP_GITHUB_REPO }}
+          NEXT_PUBLIC_GH_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
+          NEXT_PUBLIC_GH_OWNER: ${{ secrets.APP_GITHUB_OWNER }}
+          NEXT_PUBLIC_GH_REPO: ${{ secrets.APP_GITHUB_REPO }}
 
       - name: Build Electron (Mac)
         run: npx electron-builder --mac --publish never
@@ -108,5 +114,6 @@ jobs:
             ## 安装说明
             - **Windows**：双击 `.exe` 安装，完成后打开桌面图标
             - **macOS**：双击 `.dmg`，把应用拖到 Applications 文件夹
+            - **macOS 首次打开**：若提示"已损坏"，在终端运行 `xattr -cr /Applications/库存看板.app`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

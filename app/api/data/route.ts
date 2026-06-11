@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchInventoryData, saveInventoryData } from '@/lib/github'
 import type { InventoryData } from '@/lib/types'

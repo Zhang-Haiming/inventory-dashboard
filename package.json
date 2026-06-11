@@ -20,18 +20,7 @@
     },
     "files": [
       "electron/**/*",
-      ".next/**/*",
-      "public/**/*",
-      "node_modules/**/*",
-      "package.json",
-      "next.config.ts",
-      "postcss.config.mjs",
-      "!node_modules/.cache",
-      "!node_modules/.bin/tsc",
-      "!node_modules/.bin/tsserver",
-      "!**/*.ts",
-      "!**/*.tsx",
-      "!**/*.map"
+      "out/**/*"
     ],
     "win": {
       "target": "nsis",

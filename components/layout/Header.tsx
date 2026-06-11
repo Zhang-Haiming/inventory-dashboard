@@ -13,6 +13,7 @@ interface Props {
   lastUpdated: string
   stockIn: StockInRow[]
   stockOut: StockOutRow[]
+  parseAndImport?: (file: File) => Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number }>
   thresholds: Thresholds
   lowStockCount: number
   onSave: () => void
@@ -25,7 +26,7 @@ interface Props {
 export function Header({
   isDirty, isSaving, isLoading, lastUpdated,
   stockIn, stockOut, thresholds, lowStockCount,
-  onSave, onRefresh, onImport, onExport, onThresholdsSave,
+  onSave, onRefresh, onImport, onExport, onThresholdsSave, parseAndImport,
 }: Props) {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [thresholdOpen, setThresholdOpen] = useState(false)
@@ -96,7 +97,7 @@ export function Header({
         </div>
       </header>
 
-      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onImport={onImport} />
+      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onImport={onImport} parseAndImport={parseAndImport} />
       <ThresholdModal
         open={thresholdOpen}
         onClose={() => setThresholdOpen(false)}

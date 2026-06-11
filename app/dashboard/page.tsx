@@ -25,7 +25,7 @@ export default function DashboardPage() {
     stockIn, stockOut, thresholds,
     sha, lastUpdated, isEmpty,
     isDirty, isLoading, isSaving, error,
-    loadData, saveToGitHub, importFromUpload, exportExcel,
+    loadData, saveToGitHub, importFromUpload, parseAndImport, exportExcel,
     addStockInRow, updateStockInRow, deleteStockInRow,
     addStockOutRow, updateStockOutRow, deleteStockOutRow,
     setThresholds,
@@ -58,6 +58,7 @@ export default function DashboardPage() {
           onSave={saveToGitHub} onRefresh={loadData}
           onImport={importFromUpload} onExport={handleExport}
           onThresholdsSave={setThresholds}
+          parseAndImport={parseAndImport}
         />
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
