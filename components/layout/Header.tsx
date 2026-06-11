@@ -13,27 +13,44 @@ interface Props {
   lastUpdated: string
   stockIn: StockInRow[]
   stockOut: StockOutRow[]
-  parseAndImport?: (file: File) => Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number }>
   thresholds: Thresholds
   lowStockCount: number
+  isElectron: boolean
   onSave: () => void
   onRefresh: () => void
   onImport: (stockIn: StockInRow[], stockOut: StockOutRow[]) => void
   onExport: () => void
   onThresholdsSave: (thresholds: Thresholds) => void
+  parseAndImport?: (file: File) => Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number }>
+  pickAndImport?: () => Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number } | null>
 }
 
 export function Header({
   isDirty, isSaving, isLoading, lastUpdated,
   stockIn, stockOut, thresholds, lowStockCount,
-  onSave, onRefresh, onImport, onExport, onThresholdsSave, parseAndImport,
+  isElectron,
+  onSave, onRefresh, onImport, onExport, onThresholdsSave,
+  parseAndImport, pickAndImport,
 }: Props) {
   const [uploadOpen, setUploadOpen] = useState(false)
+
   const [thresholdOpen, setThresholdOpen] = useState(false)
 
   const lastUpdatedStr = lastUpdated
     ? new Date(lastUpdated).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : ''
+
+  // Electron 模式：直接弹系统文件选择框
+  const handleUploadClick = async () => {
+    if (isElectron && pickAndImport) {
+      const result = await pickAndImport()
+      if (result && result.warnings.length > 0) {
+        alert(`导入成功（入库 ${result.stockInCount} 条，出库 ${result.stockOutCount} 条）\n\n注意：\n${result.warnings.join('\n')}`)
+      }
+    } else {
+      setUploadOpen(true)
+    }
+  }
 
   return (
     <>
@@ -50,7 +67,7 @@ export function Header({
             </div>
           </div>
 
-          {/* 低库存提示徽标 */}
+          {/* 低库存提示 */}
           {lowStockCount > 0 && (
             <div className="flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">
               <AlertTriangle className="h-3.5 w-3.5" />
@@ -59,18 +76,12 @@ export function Header({
           )}
 
           {/* 操作按钮 */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRefresh}
-            disabled={isLoading}
-            title="刷新数据"
-          >
+          <Button variant="ghost" size="sm" onClick={onRefresh} disabled={isLoading} title="刷新数据">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline ml-1">刷新</span>
           </Button>
 
-          <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
+          <Button variant="outline" size="sm" onClick={handleUploadClick}>
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline ml-1">上传 Excel</span>
           </Button>
@@ -97,7 +108,16 @@ export function Header({
         </div>
       </header>
 
-      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onImport={onImport} parseAndImport={parseAndImport} />
+      {/* Web 模式才用 Modal，Electron 用系统对话框 */}
+      {!isElectron && (
+        <UploadModal
+          open={uploadOpen}
+          onClose={() => setUploadOpen(false)}
+          onImport={onImport}
+          parseAndImport={parseAndImport}
+        />
+      )}
+
       <ThresholdModal
         open={thresholdOpen}
         onClose={() => setThresholdOpen(false)}

@@ -22,6 +22,9 @@
       "electron/**/*",
       "out/**/*"
     ],
+    "extraResources": [
+      { "from": "out", "to": "app/out" }
+    ],
     "win": {
       "target": "nsis",
       "icon": "electron/icon.ico"

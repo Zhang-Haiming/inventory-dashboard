@@ -25,10 +25,10 @@ export default function DashboardPage() {
     stockIn, stockOut, thresholds,
     sha, lastUpdated, isEmpty,
     isDirty, isLoading, isSaving, error,
-    loadData, saveToGitHub, importFromUpload, parseAndImport, exportExcel,
+    loadData, saveToGitHub, importFromUpload, parseAndImport, pickAndImport, exportExcel,
     addStockInRow, updateStockInRow, deleteStockInRow,
     addStockOutRow, updateStockOutRow, deleteStockOutRow,
-    setThresholds,
+    setThresholds, isElectron,
   } = useInventoryData()
 
   const [activeTab, setActiveTab] = useState<TabId>('summary')
@@ -59,6 +59,8 @@ export default function DashboardPage() {
           onImport={importFromUpload} onExport={handleExport}
           onThresholdsSave={setThresholds}
           parseAndImport={parseAndImport}
+          pickAndImport={pickAndImport}
+          isElectron={isElectron}
         />
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
@@ -83,6 +85,9 @@ export default function DashboardPage() {
         onSave={saveToGitHub} onRefresh={loadData}
         onImport={importFromUpload} onExport={handleExport}
         onThresholdsSave={setThresholds}
+        parseAndImport={parseAndImport}
+        pickAndImport={pickAndImport}
+        isElectron={isElectron}
       />
 
       {/* 错误提示 */}
