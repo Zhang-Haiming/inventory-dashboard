@@ -35,6 +35,14 @@
       "allowToChangeInstallationDirectory": true,
       "installerLanguages": ["zh_CN"],
       "language": "2052"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "electron/icon.png",
+      "category": "public.app-category.business"
+    },
+    "dmg": {
+      "title": "库存看板"
     }
   },
   "dependencies": {
