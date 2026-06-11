@@ -5,9 +5,11 @@ const isElectronBuild = !!process.env.NEXT_PUBLIC_GH_TOKEN;
 
 const nextConfig: NextConfig = {
   ...(isElectronBuild ? {
-    // 静态导出：生成纯 HTML/JS/CSS，Electron 直接加载
     output: "export",
     images: { unoptimized: true },
+    // 关键：让所有资源使用相对路径，file:// 协议才能正确加载
+    assetPrefix: "./",
+    trailingSlash: true,
   } : {}),
 };
 

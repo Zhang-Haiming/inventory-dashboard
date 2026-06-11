@@ -73,7 +73,8 @@ function createWindow() {
     ? path.join(process.resourcesPath, 'app', 'out')
     : path.join(__dirname, '..', 'out')
 
-  mainWindow.loadFile(path.join(outDir, 'index.html'))
+  // 直接加载 dashboard 页面（跳过根路径的 307 重定向）
+  mainWindow.loadFile(path.join(outDir, 'dashboard', 'index.html'))
 
   // 外部链接在系统浏览器打开
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
