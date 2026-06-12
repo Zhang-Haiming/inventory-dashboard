@@ -3,25 +3,19 @@ name: Build Desktop App
 on:
   push:
     tags:
-      - 'v*'          # 推送 v1.0.0 这样的 tag 时触发
-  workflow_dispatch:  # 也可以在 GitHub 页面手动触发
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
-  build-windows:
+  build-windows-x64:
     runs-on: windows-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
+      - run: npm ci
       - name: Build Next.js (静态导出)
         run: |
           mv app/api app/_api_disabled
@@ -31,34 +25,53 @@ jobs:
           NEXT_PUBLIC_GH_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
           NEXT_PUBLIC_GH_OWNER: ${{ secrets.APP_GITHUB_OWNER }}
           NEXT_PUBLIC_GH_REPO: ${{ secrets.APP_GITHUB_REPO }}
-
-      - name: Build Electron (Windows x64 + ia32)
-        run: npx electron-builder --win --x64 --ia32 --publish never
+      - name: Build Electron (Windows x64)
+        run: npx electron-builder --win --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Windows installer
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: windows-installer
+          name: windows-x64
+          path: dist/*.exe
+          retention-days: 30
+
+  build-windows-ia32:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      - name: Build Next.js (静态导出)
+        run: |
+          mv app/api app/_api_disabled
+          npm run build
+          mv app/_api_disabled app/api
+        env:
+          NEXT_PUBLIC_GH_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
+          NEXT_PUBLIC_GH_OWNER: ${{ secrets.APP_GITHUB_OWNER }}
+          NEXT_PUBLIC_GH_REPO: ${{ secrets.APP_GITHUB_REPO }}
+      - name: Build Electron (Windows 32位)
+        run: npx electron-builder --win --ia32 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-ia32
           path: dist/*.exe
           retention-days: 30
 
   build-mac:
     runs-on: macos-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
+      - run: npm ci
       - name: Build Next.js (静态导出)
         run: |
           mv app/api app/_api_disabled
@@ -68,33 +81,33 @@ jobs:
           NEXT_PUBLIC_GH_TOKEN: ${{ secrets.APP_GITHUB_TOKEN }}
           NEXT_PUBLIC_GH_OWNER: ${{ secrets.APP_GITHUB_OWNER }}
           NEXT_PUBLIC_GH_REPO: ${{ secrets.APP_GITHUB_REPO }}
-
       - name: Build Electron (Mac)
         run: npx electron-builder --mac --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false   # 禁止自动寻找签名证书
-
-      - name: Upload Mac DMG
-        uses: actions/upload-artifact@v4
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v4
         with:
           name: mac-dmg
           path: dist/*.dmg
           retention-days: 30
 
   release:
-    needs: [build-windows, build-mac]
+    needs: [build-windows-x64, build-windows-ia32, build-mac]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: windows-installer
+          name: windows-x64
           path: dist/
 
-      - name: Download Mac artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-ia32
+          path: dist/
+
+      - uses: actions/download-artifact@v4
         with:
           name: mac-dmg
           path: dist/
@@ -111,21 +124,21 @@ jobs:
             |------|------|
             | Windows 64位 | `库存看板 Setup x.x.x.exe` |
             | Windows 32位 | `库存看板 Setup x.x.x ia32.exe` |
-            | macOS | `库存看板-x.x.x.dmg` |
+            | macOS (Apple Silicon / Intel) | `库存看板-x.x.x-arm64.dmg` |
 
             ## 安装说明
 
             **Windows：**
-            1. 根据系统位数下载对应 `.exe`（不确定的选 32位）
-            2. 双击安装，完成后打开桌面「库存看板」图标
+            1. 根据系统位数下载对应 `.exe`（不确定选 32位，向下兼容）
+            2. 双击安装，若弹出蓝色 SmartScreen 警告点「更多信息」→「仍要运行」
+            3. 完成后打开桌面「库存看板」图标
 
             **macOS：**
             1. 下载 `.dmg`，双击打开，把「库存看板」拖到 Applications
-            2. **首次打开必做**（因为未购买苹果开发者证书，需手动解除限制）：
-               打开「终端」，粘贴以下命令并回车：
+            2. **首次打开必做**：打开「终端」运行以下命令：
                ```
                xattr -cr /Applications/库存看板.app
                ```
-            3. 之后每次正常双击图标即可，无需重复上述操作
+            3. 之后每次正常双击图标即可
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
