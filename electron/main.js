@@ -106,6 +106,19 @@ app.whenReady().then(() => {
     ? path.join(process.resourcesPath, 'app', 'out')
     : path.join(__dirname, '..', 'out')
 
+  // 确保 dashboard/_next 存在（软链到上级的 _next 目录）
+  // 解决 assetPrefix="./" 时相对路径从 dashboard/ 而非 out/ 查找的问题
+  const nextSrc = path.join(outDir, '_next')
+  const nextDst = path.join(outDir, 'dashboard', '_next')
+  if (fs.existsSync(nextSrc) && !fs.existsSync(nextDst)) {
+    try {
+      fs.symlinkSync(nextSrc, nextDst, 'dir')
+    } catch (e) {
+      // Windows 上 symlink 可能需要管理员权限，改用 junction
+      try { fs.symlinkSync(nextSrc, nextDst, 'junction') } catch (_) {}
+    }
+  }
+
   registerAppProtocol(outDir)
   createWindow(outDir)
 })

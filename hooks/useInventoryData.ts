@@ -284,7 +284,10 @@ export function useInventoryData() {
     if (IS_ELECTRON && window.electronAPI) {
       // Electron：弹出系统保存对话框
       const uint8 = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array
-      const base64 = btoa(String.fromCharCode(...uint8))
+      // 分块转换避免大文件时 spread 超出参数限制
+      let binary = ''
+      for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i])
+      const base64 = btoa(binary)
       await window.electronAPI.saveExcelDialog({ defaultName: filename, data: base64 })
     } else {
       // Web：触发浏览器下载
