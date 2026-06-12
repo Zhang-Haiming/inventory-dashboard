@@ -32,8 +32,8 @@ jobs:
           NEXT_PUBLIC_GH_OWNER: ${{ secrets.APP_GITHUB_OWNER }}
           NEXT_PUBLIC_GH_REPO: ${{ secrets.APP_GITHUB_REPO }}
 
-      - name: Build Electron (Windows)
-        run: npx electron-builder --win --x64 --publish never
+      - name: Build Electron (Windows x64 + ia32)
+        run: npx electron-builder --win --x64 --ia32 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -109,14 +109,15 @@ jobs:
 
             | 系统 | 文件 |
             |------|------|
-            | Windows | `库存看板 Setup x.x.x.exe` |
+            | Windows 64位 | `库存看板 Setup x.x.x.exe` |
+            | Windows 32位 | `库存看板 Setup x.x.x ia32.exe` |
             | macOS | `库存看板-x.x.x.dmg` |
 
             ## 安装说明
 
             **Windows：**
-            1. 下载 `.exe`，双击安装
-            2. 完成后打开桌面「库存看板」图标
+            1. 根据系统位数下载对应 `.exe`（不确定的选 32位）
+            2. 双击安装，完成后打开桌面「库存看板」图标
 
             **macOS：**
             1. 下载 `.dmg`，双击打开，把「库存看板」拖到 Applications
