@@ -100,22 +100,31 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: windows-x64
-          path: dist/
+          path: dist/x64/
 
       - uses: actions/download-artifact@v4
         with:
           name: windows-ia32
-          path: dist/
+          path: dist/ia32/
 
       - uses: actions/download-artifact@v4
         with:
           name: mac-dmg
-          path: dist/
+          path: dist/mac/
+
+      # 把所有文件移到同一目录供上传
+      - name: Merge artifacts
+        run: |
+          mkdir -p dist/release
+          mv dist/x64/*.exe  dist/release/ 2>/dev/null || true
+          mv dist/ia32/*.exe dist/release/ 2>/dev/null || true
+          mv dist/mac/*.dmg  dist/release/ 2>/dev/null || true
+          ls -lh dist/release/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: dist/release/*
           name: 库存看板 ${{ github.ref_name }}
           body: |
             ## 下载安装
