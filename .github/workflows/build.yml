@@ -29,6 +29,13 @@ jobs:
         run: npx electron-builder --win --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rename x64 installer
+        run: |
+          cd dist
+          for f in *.exe; do
+            mv "$f" "${f%.exe} x64.exe"
+          done
+        shell: bash
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x64
@@ -57,6 +64,13 @@ jobs:
         run: npx electron-builder --win --ia32 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rename ia32 installer
+        run: |
+          cd dist
+          for f in *.exe; do
+            mv "$f" "${f%.exe} 32bit.exe"
+          done
+        shell: bash
       - uses: actions/upload-artifact@v4
         with:
           name: windows-ia32
@@ -131,8 +145,8 @@ jobs:
 
             | 系统 | 文件 |
             |------|------|
-            | Windows 64位 | `库存看板 Setup x.x.x.exe` |
-            | Windows 32位 | `库存看板 Setup x.x.x ia32.exe` |
+            | Windows 64位 | `库存看板 Setup x.x.x x64.exe` |
+            | Windows 32位 | `库存看板 Setup x.x.x 32bit.exe` |
             | macOS (Apple Silicon / Intel) | `库存看板-x.x.x-arm64.dmg` |
 
             ## 安装说明
