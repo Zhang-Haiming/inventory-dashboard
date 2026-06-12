@@ -76,6 +76,9 @@ function createWindow() {
   // 直接加载 dashboard 页面（跳过根路径的 307 重定向）
   mainWindow.loadFile(path.join(outDir, 'dashboard', 'index.html'))
 
+  // 调试用：打开 DevTools（排查问题后可删除）
+  mainWindow.webContents.openDevTools()
+
   // 外部链接在系统浏览器打开
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
