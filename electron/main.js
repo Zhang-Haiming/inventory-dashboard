@@ -1,7 +1,19 @@
-const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron')
-const { net } = require('electron')
+const { app, BrowserWindow, shell, ipcMain, dialog, protocol, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
+
+// 必须在 app ready 之前注册自定义协议权限
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,  // 允许页面内 fetch() 调用
+      corsEnabled: true,
+    },
+  },
+])
 
 let mainWindow
 
@@ -14,8 +26,7 @@ ipcMain.handle('github-request', async (_event, { method, url, headers, body }) 
       const chunks = []
       res.on('data', (chunk) => chunks.push(chunk))
       res.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf-8')
-        resolve({ status: res.statusCode, text })
+        resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString('utf-8') })
       })
     })
     req.on('error', reject)
@@ -34,7 +45,6 @@ ipcMain.handle('open-excel-dialog', async () => {
   if (result.canceled || result.filePaths.length === 0) return null
   const filePath = result.filePaths[0]
   const buffer = fs.readFileSync(filePath)
-  // 返回 base64 编码的文件内容
   return { name: path.basename(filePath), data: buffer.toString('base64') }
 })
 
@@ -46,12 +56,21 @@ ipcMain.handle('save-excel-dialog', async (_event, { defaultName, data }) => {
     filters: [{ name: 'Excel 文件', extensions: ['xlsx'] }],
   })
   if (result.canceled || !result.filePath) return false
-  const buffer = Buffer.from(data, 'base64')
-  fs.writeFileSync(result.filePath, buffer)
+  fs.writeFileSync(result.filePath, Buffer.from(data, 'base64'))
   return true
 })
 
-function createWindow() {
+// 注册自定义协议，让所有资源请求都从 outDir 根目录解析
+// 这样 dashboard/index.html 里的 ./_next/... 能正确找到 out/_next/...
+function registerAppProtocol(outDir) {
+  protocol.registerFileProtocol('app', (request, callback) => {
+    const url = request.url.replace('app://', '')
+    const filePath = path.join(outDir, decodeURIComponent(url))
+    callback({ path: filePath })
+  })
+}
+
+function createWindow(outDir) {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -62,24 +81,13 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      // 加载 preload 脚本，把 IPC 暴露给渲染进程
       preload: path.join(__dirname, 'preload.js'),
     },
   })
 
-  // 加载静态导出的 Next.js 文件
-  const isPacked = app.isPackaged
-  const outDir = isPacked
-    ? path.join(process.resourcesPath, 'app', 'out')
-    : path.join(__dirname, '..', 'out')
+  // 用自定义协议加载，所有相对路径都以 outDir 为根
+  mainWindow.loadURL('app://dashboard/index.html')
 
-  // 直接加载 dashboard 页面（跳过根路径的 307 重定向）
-  mainWindow.loadFile(path.join(outDir, 'dashboard', 'index.html'))
-
-  // 调试用：打开 DevTools（排查问题后可删除）
-  mainWindow.webContents.openDevTools()
-
-  // 外部链接在系统浏览器打开
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
@@ -92,6 +100,23 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null })
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  const isPacked = app.isPackaged
+  const outDir = isPacked
+    ? path.join(process.resourcesPath, 'app', 'out')
+    : path.join(__dirname, '..', 'out')
+
+  registerAppProtocol(outDir)
+  createWindow(outDir)
+})
+
 app.on('window-all-closed', () => { app.quit() })
-app.on('activate', () => { if (mainWindow === null) createWindow() })
+app.on('activate', () => {
+  if (mainWindow === null) {
+    const isPacked = app.isPackaged
+    const outDir = isPacked
+      ? path.join(process.resourcesPath, 'app', 'out')
+      : path.join(__dirname, '..', 'out')
+    createWindow(outDir)
+  }
+})
