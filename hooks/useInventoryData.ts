@@ -136,15 +136,23 @@ function parseExcelBuffer(buffer: ArrayBuffer) {
     商品分类: ['商品分类','分类','类别','品类'],
   }
 
+  // 规范化列名，同时保留未识别的额外列（原样保留列名）
   const normalize = (raw: Record<string, unknown>) => {
     const r: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(raw)) {
+      let matched = false
       for (const [canon, aliases] of Object.entries(ALIASES)) {
-        if (aliases.includes(k.trim())) { r[canon] = v; break }
+        if (aliases.includes(k.trim())) { r[canon] = v; matched = true; break }
       }
+      // 未识别的列原样保留（发货厂家、快递公司等自定义列）
+      if (!matched) r[k.trim()] = v
     }
     return r
   }
+
+  // 固定列之外的额外字段
+  const FIXED_IN  = new Set(['商品名称','商品代码','单价','入库数量','订单时间','商品分类'])
+  const FIXED_OUT = new Set(['商品名称','商品代码','单价','出库数量','订单时间','商品分类'])
 
   const inSheet  = findSheet(['入库表','入库','入库记录','StockIn'])
   const outSheet = findSheet(['出库表','出库','出库记录','StockOut'])
@@ -152,24 +160,38 @@ function parseExcelBuffer(buffer: ArrayBuffer) {
   if (!outSheet) warnings.push(`未找到出库表，可用 Sheet：${workbook.SheetNames.join('、')}`)
 
   const toStockIn = (raw: Record<string, unknown>[]): Omit<StockInRow,'id'>[] =>
-    raw.map(normalize).filter(r => r['商品名称'] || r['商品代码']).map(r => ({
-      商品名称: String(r['商品名称'] ?? ''),
-      商品代码: String(r['商品代码'] ?? ''),
-      单价:     Number(r['单价'] ?? 0),
-      入库数量: Number(r['入库数量'] ?? 0),
-      订单时间: normalizeDate(r['订单时间']),
-      商品分类: r['商品分类'] ? String(r['商品分类']) : undefined,
-    }))
+    raw.map(normalize).filter(r => r['商品名称'] || r['商品代码']).map(r => {
+      const extra: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(r)) {
+        if (!FIXED_IN.has(k)) extra[k] = v
+      }
+      return {
+        商品名称: String(r['商品名称'] ?? ''),
+        商品代码: String(r['商品代码'] ?? ''),
+        单价:     Number(r['单价'] ?? 0),
+        入库数量: Number(r['入库数量'] ?? 0),
+        订单时间: normalizeDate(r['订单时间']),
+        商品分类: r['商品分类'] ? String(r['商品分类']) : undefined,
+        ...extra,
+      }
+    })
 
   const toStockOut = (raw: Record<string, unknown>[]): Omit<StockOutRow,'id'>[] =>
-    raw.map(normalize).filter(r => r['商品名称'] || r['商品代码']).map(r => ({
-      商品名称: String(r['商品名称'] ?? ''),
-      商品代码: String(r['商品代码'] ?? ''),
-      单价:     Number(r['单价'] ?? 0),
-      出库数量: Number(r['出库数量'] ?? 0),
-      订单时间: normalizeDate(r['订单时间']),
-      商品分类: r['商品分类'] ? String(r['商品分类']) : undefined,
-    }))
+    raw.map(normalize).filter(r => r['商品名称'] || r['商品代码']).map(r => {
+      const extra: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(r)) {
+        if (!FIXED_OUT.has(k)) extra[k] = v
+      }
+      return {
+        商品名称: String(r['商品名称'] ?? ''),
+        商品代码: String(r['商品代码'] ?? ''),
+        单价:     Number(r['单价'] ?? 0),
+        出库数量: Number(r['出库数量'] ?? 0),
+        订单时间: normalizeDate(r['订单时间']),
+        商品分类: r['商品分类'] ? String(r['商品分类']) : undefined,
+        ...extra,
+      }
+    })
 
   const stockIn  = inSheet  ? toStockIn(XLSX.utils.sheet_to_json(inSheet)  as Record<string,unknown>[]) : []
   const stockOut = outSheet ? toStockOut(XLSX.utils.sheet_to_json(outSheet) as Record<string,unknown>[]) : []
@@ -256,8 +278,8 @@ export function useInventoryData() {
 
     const buffer = Uint8Array.from(atob(file.data), c => c.charCodeAt(0)).buffer
     const result = parseExcelBuffer(buffer)
-    const stockIn: StockInRow[]  = result.stockIn.map(r  => ({ ...r, id: `si_${uuidv4()}` }))
-    const stockOut: StockOutRow[] = result.stockOut.map(r => ({ ...r, id: `so_${uuidv4()}` }))
+    const stockIn: StockInRow[]  = result.stockIn.map(r => ({ ...r, id: `si_${uuidv4()}` })) as StockInRow[]
+    const stockOut: StockOutRow[] = result.stockOut.map(r => ({ ...r, id: `so_${uuidv4()}` })) as StockOutRow[]
     importFromUpload(stockIn, stockOut)
     return { warnings: result.warnings, stockInCount: stockIn.length, stockOutCount: stockOut.length }
   }, [importFromUpload])
@@ -266,8 +288,8 @@ export function useInventoryData() {
   const parseAndImport = useCallback(async (file: File): Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number }> => {
     const buffer = await file.arrayBuffer()
     const result = parseExcelBuffer(buffer)
-    const stockIn: StockInRow[]  = result.stockIn.map(r  => ({ ...r, id: `si_${uuidv4()}` }))
-    const stockOut: StockOutRow[] = result.stockOut.map(r => ({ ...r, id: `so_${uuidv4()}` }))
+    const stockIn: StockInRow[]  = result.stockIn.map(r => ({ ...r, id: `si_${uuidv4()}` })) as StockInRow[]
+    const stockOut: StockOutRow[] = result.stockOut.map(r => ({ ...r, id: `so_${uuidv4()}` })) as StockOutRow[]
     importFromUpload(stockIn, stockOut)
     return { warnings: result.warnings, stockInCount: stockIn.length, stockOutCount: stockOut.length }
   }, [importFromUpload])
@@ -283,11 +305,8 @@ export function useInventoryData() {
 
     if (IS_ELECTRON && window.electronAPI) {
       // Electron：弹出系统保存对话框
-      const uint8 = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array
-      // 分块转换避免大文件时 spread 超出参数限制
-      let binary = ''
-      for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i])
-      const base64 = btoa(binary)
+      // 直接让 SheetJS 输出 base64，避免手动转换损坏二进制数据
+      const base64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' }) as string
       await window.electronAPI.saveExcelDialog({ defaultName: filename, data: base64 })
     } else {
       // Web：触发浏览器下载
@@ -296,12 +315,12 @@ export function useInventoryData() {
   }, [])
 
   // ---- 入库表 CRUD ----
-  const addStockInRow    = useCallback((row: Omit<StockInRow,'id'>) => setState(s => ({ ...s, stockIn: [...s.stockIn, { ...row, id:`si_${uuidv4()}` }], isDirty:true })), [])
-  const updateStockInRow = useCallback((id: string, field: keyof StockInRow, value: unknown) => setState(s => ({ ...s, stockIn: s.stockIn.map(r => r.id===id ? {...r,[field]:value} : r), isDirty:true })), [])
+  const addStockInRow    = useCallback((row: Omit<StockInRow,'id'>) => setState(s => ({ ...s, stockIn: [...s.stockIn, { ...row, id:`si_${uuidv4()}` } as StockInRow], isDirty:true })), [])
+  const updateStockInRow = useCallback((id: string, field: keyof StockInRow, value: unknown) => setState(s => ({ ...s, stockIn: s.stockIn.map(r => r.id===id ? {...r,[field]:value} as StockInRow : r), isDirty:true })), [])
   const deleteStockInRow = useCallback((id: string) => setState(s => ({ ...s, stockIn: s.stockIn.filter(r => r.id!==id), isDirty:true })), [])
 
   // ---- 出库表 CRUD ----
-  const addStockOutRow    = useCallback((row: Omit<StockOutRow,'id'>) => setState(s => ({ ...s, stockOut: [...s.stockOut, { ...row, id:`so_${uuidv4()}` }], isDirty:true })), [])
+  const addStockOutRow    = useCallback((row: Omit<StockOutRow,'id'>) => setState(s => ({ ...s, stockOut: [...s.stockOut, { ...row, id:`so_${uuidv4()}` } as StockOutRow], isDirty:true })), [])
   const updateStockOutRow = useCallback((id: string, field: keyof StockOutRow, value: unknown) => setState(s => ({ ...s, stockOut: s.stockOut.map(r => r.id===id ? {...r,[field]:value} : r), isDirty:true })), [])
   const deleteStockOutRow = useCallback((id: string) => setState(s => ({ ...s, stockOut: s.stockOut.filter(r => r.id!==id), isDirty:true })), [])
 

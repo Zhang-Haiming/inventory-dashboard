@@ -1,6 +1,9 @@
 // ---- 数据模型 ----
 
-export interface StockInRow {
+// 额外字段类型（用户在 Excel 中自定义的列）
+export type ExtraFields = Record<string, unknown>
+
+export type StockInRow = {
   id: string
   商品名称: string
   商品代码: string
@@ -8,9 +11,9 @@ export interface StockInRow {
   入库数量: number
   订单时间: string  // ISO 日期字符串 YYYY-MM-DD
   商品分类?: string
-}
+} & ExtraFields
 
-export interface StockOutRow {
+export type StockOutRow = {
   id: string
   商品名称: string
   商品代码: string
@@ -18,7 +21,7 @@ export interface StockOutRow {
   出库数量: number
   订单时间: string
   商品分类?: string
-}
+} & ExtraFields
 
 // thresholds: 商品代码 -> 最低库存警戒线（0 表示不报警）
 export type Thresholds = Record<string, number>
@@ -61,5 +64,5 @@ export interface DataApiResponse {
 export interface UploadApiResponse {
   stockIn: Omit<StockInRow, 'id'>[]
   stockOut: Omit<StockOutRow, 'id'>[]
-  warnings: string[]   // 列名识别警告
+  warnings: string[]
 }

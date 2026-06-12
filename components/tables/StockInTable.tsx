@@ -1,11 +1,14 @@
 'use client'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Trash2, Plus } from 'lucide-react'
 import { EditableCell } from './EditableCell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatAmount } from '@/lib/utils'
 import type { StockInRow } from '@/lib/types'
+
+// 固定列，始终显示在前面
+const FIXED_COLS = ['商品名称', '商品代码', '商品分类', '单价', '入库数量', '订单时间']
 
 interface Props {
   rows: StockInRow[]
@@ -18,14 +21,32 @@ export function StockInTable({ rows, onUpdate, onDelete, onAdd }: Props) {
   const [filterText, setFilterText] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
+  // 按时间从新到旧排序，新增行（时间相同）排在最前面
+  const sorted = useMemo(() =>
+    [...rows].sort((a, b) => {
+      const ta = a.订单时间 || ''
+      const tb = b.订单时间 || ''
+      return tb.localeCompare(ta)  // 降序：新的在前
+    }), [rows])
+
   const filtered = filterText
-    ? rows.filter(
-        (r) =>
-          r.商品名称.includes(filterText) ||
-          r.商品代码.includes(filterText) ||
-          (r.商品分类 ?? '').includes(filterText)
+    ? sorted.filter(r =>
+        String(r.商品名称 ?? '').includes(filterText) ||
+        String(r.商品代码 ?? '').includes(filterText) ||
+        String(r.商品分类 ?? '').includes(filterText)
       )
-    : rows
+    : sorted
+
+  // 获取额外列（除固定列和 id 之外的所有列）
+  const extraCols = useMemo(() => {
+    const cols = new Set<string>()
+    rows.forEach(r => {
+      Object.keys(r).forEach(k => {
+        if (k !== 'id' && !FIXED_COLS.includes(k)) cols.add(k)
+      })
+    })
+    return Array.from(cols)
+  }, [rows])
 
   const handleAdd = () => {
     const today = new Date().toISOString().slice(0, 10)
@@ -39,7 +60,7 @@ export function StockInTable({ rows, onUpdate, onDelete, onAdd }: Props) {
     })
   }
 
-  const totalAmount = rows.reduce((sum, r) => sum + r.单价 * r.入库数量, 0)
+  const totalAmount = rows.reduce((sum, r) => sum + (Number(r.单价) || 0) * (Number(r.入库数量) || 0), 0)
 
   return (
     <div className="space-y-3">
@@ -70,13 +91,19 @@ export function StockInTable({ rows, onUpdate, onDelete, onAdd }: Props) {
               <th className="text-right py-3 px-3 font-medium text-slate-600 min-w-[80px]">入库数量</th>
               <th className="text-right py-3 px-3 font-medium text-slate-600 min-w-[100px]">金额</th>
               <th className="text-left py-3 px-3 font-medium text-slate-600 min-w-[110px]">订单时间</th>
+              {/* 额外自定义列 */}
+              {extraCols.map(col => (
+                <th key={col} className="text-left py-3 px-3 font-medium text-slate-600 min-w-[100px]">
+                  {col}
+                </th>
+              ))}
               <th className="py-3 px-3 w-10"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-8 text-slate-400">
+                <td colSpan={8 + extraCols.length} className="text-center py-8 text-slate-400">
                   {filterText ? '没有匹配的记录' : '暂无入库记录，点击"新增入库"添加'}
                 </td>
               </tr>
@@ -89,71 +116,44 @@ export function StockInTable({ rows, onUpdate, onDelete, onAdd }: Props) {
                 }`}
               >
                 <td className="py-2 px-3">
-                  <EditableCell
-                    value={row.商品名称}
-                    onSave={(v) => onUpdate(row.id, '商品名称', v)}
-                    placeholder="输入商品名称"
-                  />
+                  <EditableCell value={String(row.商品名称 ?? '')} onSave={(v) => onUpdate(row.id, '商品名称', v)} placeholder="输入商品名称" />
                 </td>
                 <td className="py-2 px-3 font-mono">
-                  <EditableCell
-                    value={row.商品代码}
-                    onSave={(v) => onUpdate(row.id, '商品代码', v)}
-                    placeholder="输入代码"
-                  />
+                  <EditableCell value={String(row.商品代码 ?? '')} onSave={(v) => onUpdate(row.id, '商品代码', v)} placeholder="输入代码" />
                 </td>
                 <td className="py-2 px-3">
-                  <EditableCell
-                    value={row.商品分类 ?? ''}
-                    onSave={(v) => onUpdate(row.id, '商品分类', v)}
-                    placeholder="分类"
-                  />
+                  <EditableCell value={String(row.商品分类 ?? '')} onSave={(v) => onUpdate(row.id, '商品分类', v)} placeholder="分类" />
                 </td>
                 <td className="py-2 px-3">
-                  <EditableCell
-                    value={row.单价}
-                    onSave={(v) => onUpdate(row.id, '单价', v)}
-                    type="number"
-                  />
+                  <EditableCell value={Number(row.单价 ?? 0)} onSave={(v) => onUpdate(row.id, '单价', v)} type="number" />
                 </td>
                 <td className="py-2 px-3">
-                  <EditableCell
-                    value={row.入库数量}
-                    onSave={(v) => onUpdate(row.id, '入库数量', v)}
-                    type="number"
-                  />
+                  <EditableCell value={Number(row.入库数量 ?? 0)} onSave={(v) => onUpdate(row.id, '入库数量', v)} type="number" />
                 </td>
                 <td className="py-2 px-3 text-right text-green-700 text-xs font-medium">
-                  {formatAmount(row.单价 * row.入库数量)}
+                  {formatAmount((Number(row.单价) || 0) * (Number(row.入库数量) || 0))}
                 </td>
                 <td className="py-2 px-3">
-                  <EditableCell
-                    value={row.订单时间}
-                    onSave={(v) => onUpdate(row.id, '订单时间', v)}
-                    type="date"
-                  />
+                  <EditableCell value={String(row.订单时间 ?? '')} onSave={(v) => onUpdate(row.id, '订单时间', v)} type="date" />
                 </td>
+                {/* 额外列 */}
+                {extraCols.map(col => (
+                  <td key={col} className="py-2 px-3">
+                    <EditableCell
+                      value={String(row[col] ?? '')}
+                      onSave={(v) => onUpdate(row.id, col as keyof StockInRow, v)}
+                      placeholder={col}
+                    />
+                  </td>
+                ))}
                 <td className="py-2 px-3">
                   {deleteTarget === row.id ? (
                     <div className="flex gap-1">
-                      <button
-                        onClick={() => { onDelete(row.id); setDeleteTarget(null) }}
-                        className="text-xs text-red-500 hover:underline"
-                      >
-                        确认
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(null)}
-                        className="text-xs text-slate-400 hover:underline"
-                      >
-                        取消
-                      </button>
+                      <button onClick={() => { onDelete(row.id); setDeleteTarget(null) }} className="text-xs text-red-500 hover:underline">确认</button>
+                      <button onClick={() => setDeleteTarget(null)} className="text-xs text-slate-400 hover:underline">取消</button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => setDeleteTarget(row.id)}
-                      className="text-slate-300 hover:text-red-400 transition-colors"
-                    >
+                    <button onClick={() => setDeleteTarget(row.id)} className="text-slate-300 hover:text-red-400 transition-colors">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}

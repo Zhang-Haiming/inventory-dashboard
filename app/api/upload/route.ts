@@ -24,14 +24,8 @@ export async function POST(req: NextRequest) {
     const parsed = parseExcel(buffer)
 
     // 为每行分配唯一 id（id 不来自 Excel，由后端生成）
-    const stockIn: StockInRow[] = parsed.stockIn.map((row) => ({
-      ...row,
-      id: newStockInId(),
-    }))
-    const stockOut: StockOutRow[] = parsed.stockOut.map((row) => ({
-      ...row,
-      id: newStockOutId(),
-    }))
+    const stockIn = parsed.stockIn.map((row) => ({ ...row, id: newStockInId() })) as StockInRow[]
+    const stockOut = parsed.stockOut.map((row) => ({ ...row, id: newStockOutId() })) as StockOutRow[]
 
     return NextResponse.json({
       stockIn,
