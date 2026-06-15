@@ -1,0 +1,239 @@
+name: Build Tauri App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  # ─────────────────────────────────────────
+  #  macOS ARM64 (Apple Silicon / M 系列)
+  # ─────────────────────────────────────────
+  build-mac:
+    runs-on: macos-latest   # GitHub 托管的 macos-latest 为 ARM64 (M1)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: backend/go.sum
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0" --locked
+
+      - name: Build Go sidecar (macOS ARM64)
+        run: |
+          cd backend
+          GOOS=darwin GOARCH=arm64 go build \
+            -o ../src-tauri/binaries/backend-aarch64-apple-darwin .
+
+      - run: npm ci
+
+      - name: Build Tauri (macOS)
+        run: cargo tauri build
+        env:
+          # 签名关闭，免费分发（用户需手动执行 xattr -cr）
+          APPLE_SIGNING_IDENTITY: "-"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          retention-days: 30
+
+  # ─────────────────────────────────────────
+  #  Windows x64
+  # ─────────────────────────────────────────
+  build-windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: backend/go.sum
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0" --locked
+
+      - name: Build Go sidecar (Windows x64)
+        shell: pwsh
+        run: |
+          cd backend
+          $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
+          go build -o ../src-tauri/binaries/backend-x86_64-pc-windows-msvc.exe .
+
+      - run: npm ci
+
+      - name: Build Tauri (Windows x64)
+        run: cargo tauri build --target x86_64-pc-windows-msvc
+
+      - name: Rename installer (添加 x64 后缀)
+        shell: pwsh
+        run: |
+          $dir = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+          Get-ChildItem "$dir/*.exe" | ForEach-Object {
+            $newName = $_.BaseName + " x64.exe"
+            Rename-Item $_.FullName (Join-Path $_.Directory $newName)
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          retention-days: 30
+
+  # ─────────────────────────────────────────
+  #  Windows 32 位
+  # ─────────────────────────────────────────
+  build-windows-ia32:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: backend/go.sum
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0" --locked
+
+      - name: Build Go sidecar (Windows 32 位)
+        shell: pwsh
+        run: |
+          cd backend
+          $env:GOOS = "windows"; $env:GOARCH = "386"; $env:CGO_ENABLED = "0"
+          go build -o ../src-tauri/binaries/backend-i686-pc-windows-msvc.exe .
+
+      - run: npm ci
+
+      - name: Build Tauri (Windows 32 位)
+        run: cargo tauri build --target i686-pc-windows-msvc
+
+      - name: Rename installer (添加 32bit 后缀)
+        shell: pwsh
+        run: |
+          $dir = "src-tauri/target/i686-pc-windows-msvc/release/bundle/nsis"
+          Get-ChildItem "$dir/*.exe" | ForEach-Object {
+            $newName = $_.BaseName + " 32bit.exe"
+            Rename-Item $_.FullName (Join-Path $_.Directory $newName)
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-ia32
+          path: src-tauri/target/i686-pc-windows-msvc/release/bundle/nsis/*.exe
+          retention-days: 30
+
+  # ─────────────────────────────────────────
+  #  发布 GitHub Release（仅推 tag 时触发）
+  # ─────────────────────────────────────────
+  release:
+    needs: [build-mac, build-windows-x64, build-windows-ia32]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-dmg
+          path: dist/mac/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-x64
+          path: dist/x64/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-ia32
+          path: dist/ia32/
+
+      - name: Merge all artifacts
+        run: |
+          mkdir -p dist/release
+          mv dist/mac/*.dmg  dist/release/ 2>/dev/null || true
+          mv dist/x64/*.exe  dist/release/ 2>/dev/null || true
+          mv dist/ia32/*.exe dist/release/ 2>/dev/null || true
+          ls -lh dist/release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/release/*
+          name: 库存看板 ${{ github.ref_name }}
+          body: |
+            ## 下载安装
+
+            | 系统 | 文件 |
+            |------|------|
+            | Windows 64位 | `库存看板_x.x.x_x64-setup x64.exe` |
+            | Windows 32位 | `库存看板_x.x.x_x86-setup 32bit.exe` |
+            | macOS (Apple Silicon) | `库存看板_x.x.x_aarch64.dmg` |
+
+            ## 安装说明
+
+            **Windows：**
+            1. 根据系统位数下载对应 `.exe`（不确定选 32位，向下兼容）
+            2. 双击安装，若弹出蓝色 SmartScreen 警告点「更多信息」→「仍要运行」
+            3. 完成后打开桌面「库存看板」图标
+
+            **macOS：**
+            1. 下载 `.dmg`，双击打开，把「库存看板」拖到 Applications
+            2. **首次打开必做**：打开「终端」运行以下命令：
+               ```
+               xattr -cr /Applications/库存看板.app
+               ```
+            3. 之后每次正常双击图标即可
+
+            ## ⚠️ 首次使用配置
+
+            安装后在 App 目录旁创建 `.env.local` 文件，填入 GitHub 配置：
+            ```
+            GITHUB_TOKEN=ghp_xxxx
+            GITHUB_OWNER=your_username
+            GITHUB_REPO=your_repo
+            GH_DATA_BRANCH=data-tauri
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

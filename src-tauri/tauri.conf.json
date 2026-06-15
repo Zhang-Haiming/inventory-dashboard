@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "inventory-dashboard",
+  "productName": "库存看板",
   "version": "0.1.0",
   "identifier": "com.internal.inventory-dashboard",
   "build": {
@@ -37,6 +37,24 @@
     ],
     "externalBin": [
       "binaries/backend"
-    ]
+    ],
+    "macOS": {
+      "dmg": {
+        "title": "库存看板"
+      },
+      "category": "public.app-category.business",
+      "signing": {
+        "identity": null
+      },
+      "notarization": null
+    },
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false,
+        "languages": ["SimpChinese"],
+        "oneclick": false,
+        "allowToChangeInstallationDirectory": true
+      }
+    }
   }
 }
