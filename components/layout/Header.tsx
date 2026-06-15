@@ -40,12 +40,19 @@ export function Header({
     ? new Date(lastUpdated).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : ''
 
-  // Electron 模式：直接弹系统文件选择框
+  // Electron 模式：直接弹系统文件选择框；Web 模式：弹 Modal
   const handleUploadClick = async () => {
     if (isElectron && pickAndImport) {
       const result = await pickAndImport()
-      if (result && result.warnings.length > 0) {
+      if (result === null) {
+        // electronAPI 未注入，降级到 Modal
+        setUploadOpen(true)
+        return
+      }
+      if (result.warnings.length > 0) {
         alert(`导入成功（入库 ${result.stockInCount} 条，出库 ${result.stockOutCount} 条）\n\n注意：\n${result.warnings.join('\n')}`)
+      } else {
+        alert(`导入成功！入库 ${result.stockInCount} 条，出库 ${result.stockOutCount} 条`)
       }
     } else {
       setUploadOpen(true)
@@ -108,15 +115,13 @@ export function Header({
         </div>
       </header>
 
-      {/* Web 模式才用 Modal，Electron 用系统对话框 */}
-      {!isElectron && (
-        <UploadModal
-          open={uploadOpen}
-          onClose={() => setUploadOpen(false)}
-          onImport={onImport}
-          parseAndImport={parseAndImport}
-        />
-      )}
+      {/* 始终渲染 Modal 作为 fallback（Electron 优先用系统对话框，不可用时降级到此）*/}
+      <UploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onImport={onImport}
+        parseAndImport={parseAndImport}
+      />
 
       <ThresholdModal
         open={thresholdOpen}
