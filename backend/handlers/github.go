@@ -20,12 +20,20 @@ type ghEnv struct {
 	branch string // GH_DATA_BRANCH，如 "data-tauri"，默认 "main"
 }
 
+// getenv 优先读新变量名，回退到旧变量名（兼容旧 .env.local）
+func getenv(newKey, oldKey string) string {
+	if v := os.Getenv(newKey); v != "" {
+		return v
+	}
+	return os.Getenv(oldKey)
+}
+
 func loadGhEnv() (ghEnv, error) {
 	e := ghEnv{
-		token:  os.Getenv("GH_TOKEN"),
-		owner:  os.Getenv("GH_OWNER"),
-		repo:   os.Getenv("GH_REPO"),
-		branch: os.Getenv("GH_DATA_BRANCH"),
+		token:  getenv("GITHUB_TOKEN", "GH_TOKEN"),
+		owner:  getenv("GITHUB_OWNER", "GH_OWNER"),
+		repo:   getenv("GITHUB_REPO", "GH_REPO"),
+		branch: getenv("GH_DATA_BRANCH", ""),
 	}
 	if e.token == "" || e.owner == "" || e.repo == "" {
 		return e, fmt.Errorf("缺少环境变量：GH_TOKEN / GH_OWNER / GH_REPO")
@@ -85,6 +93,7 @@ func SyncGitHub(args []string) error {
 
 	msg := fmt.Sprintf("📦 更新库存数据 %s", time.Now().Format("2006-01-02"))
 
+	// 顺序写入：三个文件依次提交，避免并发 commit 导致 GitHub 409
 	type task struct {
 		path string
 		data json.RawMessage
@@ -94,15 +103,8 @@ func SyncGitHub(args []string) error {
 		{dataPaths.stockOut,   payload.StockOut},
 		{dataPaths.thresholds, payload.Thresholds},
 	}
-
-	errs := make(chan error, len(tasks))
 	for _, t := range tasks {
-		go func(t task) {
-			errs <- client.putFile(t.path, t.data, msg)
-		}(t)
-	}
-	for range tasks {
-		if err := <-errs; err != nil {
+		if err := client.putFile(t.path, t.data, msg); err != nil {
 			return err
 		}
 	}

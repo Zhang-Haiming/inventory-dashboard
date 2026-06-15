@@ -41,7 +41,8 @@ export default function App() {
     try {
       await exportExcel()
     } catch (err) {
-      alert(err instanceof Error ? err.message : '下载失败')
+      const msg = typeof err === 'string' ? err : err instanceof Error ? err.message : '下载失败'
+      alert(msg)
     }
   }
 

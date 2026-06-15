@@ -59,7 +59,7 @@ export function useInventoryData() {
         }))
       }
     } catch (err) {
-      setState(s => ({ ...s, isLoading: false, error: err instanceof Error ? err.message : '加载失败' }))
+      setState(s => ({ ...s, isLoading: false, error: toMsg(err, '加载失败') }))
     }
   }, [])
 
@@ -72,7 +72,7 @@ export function useInventoryData() {
       await invoke('pull_from_github')
       await loadData()           // 重新从 SQLite 读到界面
     } catch (err) {
-      setState(s => ({ ...s, isLoading: false, error: err instanceof Error ? err.message : '拉取失败' }))
+      setState(s => ({ ...s, isLoading: false, error: toMsg(err, '拉取失败') }))
     }
   }, [loadData])
 
@@ -91,7 +91,7 @@ export function useInventoryData() {
       setState(prev => ({ ...prev, isDirty: false, error: null }))
       return true
     } catch (err) {
-      setState(prev => ({ ...prev, error: err instanceof Error ? err.message : '保存失败' }))
+      setState(prev => ({ ...prev, error: toMsg(err, '保存失败') }))
       return false
     }
   }, [])
@@ -117,8 +117,7 @@ export function useInventoryData() {
       }))
       return true
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '保存失败'
-      setState(prev => ({ ...prev, isSaving: false, error: msg }))
+      setState(prev => ({ ...prev, isSaving: false, error: toMsg(err) }))
       return false
     }
   }, [])
@@ -220,6 +219,13 @@ export function useInventoryData() {
     addStockOutRow, updateStockOutRow, deleteStockOutRow,
     setThresholds,
   }
+}
+
+// Tauri v2 的 invoke() 出错时抛出的是字符串而不是 Error 对象
+function toMsg(err: unknown, fallback = '操作失败'): string {
+  if (typeof err === 'string') return err
+  if (err instanceof Error) return err.message
+  return fallback
 }
 
 function mergeThresholds(existing: Thresholds, stockIn: StockInRow[], stockOut: StockOutRow[]): Thresholds {

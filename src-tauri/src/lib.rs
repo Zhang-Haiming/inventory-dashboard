@@ -7,9 +7,16 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // 开发时从项目根目录的 .env.local 加载 GitHub 配置
+    // 开发时加载 .env.local（GitHub 配置）
+    // 依次尝试：当前目录 → 上级目录（src-tauri/ 下运行时）→ 可执行文件旁边
     // 生产打包后此文件不存在，env vars 需通过其他方式注入（todo：设置界面）
-    let _ = dotenvy::from_filename(".env.local");
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let _ = dotenvy::from_path(cwd.join(".env.local"))
+        .or_else(|_| dotenvy::from_path(cwd.join("..").join(".env.local")))
+        .or_else(|_| {
+            let exe = std::env::current_exe().unwrap_or_default();
+            dotenvy::from_path(exe.parent().unwrap_or(std::path::Path::new(".")).join(".env.local"))
+        });
 
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())
