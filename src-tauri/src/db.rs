@@ -152,3 +152,22 @@ pub fn get_meta(conn: &Connection, key: &str) -> Result<Option<String>> {
         |r| r.get(0),
     ).optional()
 }
+
+// ---- GitHub 配置（复用 meta 表，key 加 gh_ 前缀）----
+
+pub fn save_github_config(conn: &Connection, config: &crate::commands::GitHubConfig) -> Result<()> {
+    set_meta(conn, "gh_token",   &config.token)?;
+    set_meta(conn, "gh_owner",   &config.owner)?;
+    set_meta(conn, "gh_repo",    &config.repo)?;
+    set_meta(conn, "gh_branch",  &config.data_branch)?;
+    Ok(())
+}
+
+pub fn load_github_config(conn: &Connection) -> Result<crate::commands::GitHubConfig> {
+    Ok(crate::commands::GitHubConfig {
+        token:       get_meta(conn, "gh_token")? .unwrap_or_default(),
+        owner:       get_meta(conn, "gh_owner")? .unwrap_or_default(),
+        repo:        get_meta(conn, "gh_repo")?  .unwrap_or_default(),
+        data_branch: get_meta(conn, "gh_branch")?.unwrap_or_default(),
+    })
+}

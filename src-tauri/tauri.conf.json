@@ -39,21 +39,13 @@
       "binaries/backend"
     ],
     "macOS": {
-      "dmg": {
-        "title": "库存看板"
-      },
-      "category": "public.app-category.business",
-      "signing": {
-        "identity": null
-      },
-      "notarization": null
+      "signingIdentity": "-"
     },
     "windows": {
       "nsis": {
         "displayLanguageSelector": false,
         "languages": ["SimpChinese"],
-        "oneclick": false,
-        "allowToChangeInstallationDirectory": true
+        "installMode": "perMachine"
       }
     }
   }

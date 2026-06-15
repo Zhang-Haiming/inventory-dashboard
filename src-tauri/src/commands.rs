@@ -62,6 +62,14 @@ pub struct InventoryPayload {
     pub last_updated: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GitHubConfig {
+    pub token:       String,
+    pub owner:       String,
+    pub repo:        String,
+    pub data_branch: String,
+}
+
 // ---- Tauri Commands ----
 
 /// 加载所有库存数据（前端启动时调用）
@@ -251,6 +259,36 @@ pub async fn pull_from_github(app: tauri::AppHandle, db: State<'_, DbState>) -> 
     db::upsert_stock_out(&conn, &pulled.stock_out).map_err(|e| e.to_string())?;
     db::upsert_thresholds(&conn, &pulled.thresholds).map_err(|e| e.to_string())?;
     db::set_meta(&conn, "last_updated", &chrono_now()).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// 读取已保存的 GitHub 配置（优先返回 DB 值；若 env var 已设置则合并覆盖）
+#[tauri::command]
+pub fn get_github_config(db: State<'_, DbState>) -> Result<GitHubConfig, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let mut cfg = db::load_github_config(&conn).map_err(|e| e.to_string())?;
+
+    // 若 .env.local 或系统环境变量有更高优先级的值，展示给用户看
+    if let Ok(v) = std::env::var("GITHUB_TOKEN") { if !v.is_empty() { cfg.token       = v; } }
+    if let Ok(v) = std::env::var("GITHUB_OWNER") { if !v.is_empty() { cfg.owner       = v; } }
+    if let Ok(v) = std::env::var("GITHUB_REPO")  { if !v.is_empty() { cfg.repo        = v; } }
+    if let Ok(v) = std::env::var("GH_DATA_BRANCH") { if !v.is_empty() { cfg.data_branch = v; } }
+
+    Ok(cfg)
+}
+
+/// 保存 GitHub 配置到 SQLite，并立即更新进程环境变量（Go sidecar 同步生效）
+#[tauri::command]
+pub fn save_github_config(config: GitHubConfig, db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::save_github_config(&conn, &config).map_err(|e| e.to_string())?;
+
+    // 立即更新进程 env，后续 Go sidecar 调用无需重启即可生效
+    std::env::set_var("GITHUB_TOKEN",   &config.token);
+    std::env::set_var("GITHUB_OWNER",   &config.owner);
+    std::env::set_var("GITHUB_REPO",    &config.repo);
+    std::env::set_var("GH_DATA_BRANCH", &config.data_branch);
 
     Ok(())
 }

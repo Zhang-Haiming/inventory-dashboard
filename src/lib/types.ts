@@ -68,3 +68,12 @@ export interface UploadApiResponse {
   stockOut: Omit<StockOutRow, 'id'>[]
   warnings: string[]
 }
+
+// ---- GitHub 配置 ----
+
+export interface GitHubConfig {
+  token:       string   // GITHUB_TOKEN
+  owner:       string   // GITHUB_OWNER
+  repo:        string   // GITHUB_REPO
+  data_branch: string   // GH_DATA_BRANCH（Rust snake_case，与 Serde 序列化保持一致）
+}

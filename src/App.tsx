@@ -1,20 +1,22 @@
 import { useState, useMemo } from 'react'
-import { BarChart2, Package, AlertTriangle, ListOrdered, PackageOpen } from 'lucide-react'
+import { BarChart2, Package, AlertTriangle, ListOrdered, PackageOpen, Settings2 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { MonthlySummary } from '@/components/dashboard/MonthlySummary'
 import { CategoryInventory } from '@/components/dashboard/CategoryInventory'
 import { LowStockAlert } from '@/components/dashboard/LowStockAlert'
 import { StockInTable } from '@/components/tables/StockInTable'
 import { StockOutTable } from '@/components/tables/StockOutTable'
+import { GitHubConfigTab } from '@/components/modals/GitHubConfigTab'
 import { useInventoryData } from '@/hooks/useInventoryData'
 import { getCategoryInventory, getLowStockItems } from '@/lib/dataUtils'
 
 const TABS = [
-  { id: 'summary',   label: '月度统计', icon: BarChart2 },
-  { id: 'inventory', label: '商品库存', icon: Package },
-  { id: 'alerts',    label: '库存预警', icon: AlertTriangle },
-  { id: 'stockin',   label: '入库记录', icon: ListOrdered },
-  { id: 'stockout',  label: '出库记录', icon: PackageOpen },
+  { id: 'summary',   label: '月度统计',   icon: BarChart2 },
+  { id: 'inventory', label: '商品库存',   icon: Package },
+  { id: 'alerts',    label: '库存预警',   icon: AlertTriangle },
+  { id: 'stockin',   label: '入库记录',   icon: ListOrdered },
+  { id: 'stockout',  label: '出库记录',   icon: PackageOpen },
+  { id: 'github',    label: 'GitHub 配置', icon: Settings2 },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -142,6 +144,7 @@ export default function App() {
               <StockOutTable rows={stockOut}
                 onUpdate={updateStockOutRow} onDelete={deleteStockOutRow} onAdd={addStockOutRow} />
             )}
+            {activeTab === 'github' && <GitHubConfigTab />}
           </div>
         </div>
       )}
