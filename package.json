@@ -2,14 +2,12 @@
   "name": "inventory-dashboard",
   "version": "0.1.0",
   "private": true,
-  "main": "electron/main.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "electron:dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "next build && electron-builder --win --x64",
-    "electron:build:mac": "next build && electron-builder --mac"
+    "dev:frontend": "vite",
+    "build:frontend": "vite build",
+    "dev": "cargo tauri dev",
+    "build": "cargo tauri build",
+    "build:backend": "cd backend && go build -o ../src-tauri/binaries/backend-$(go env GOOS)-$(go env GOARCH) ."
   },
   "build": {
     "appId": "com.internal.inventory-dashboard",
@@ -23,7 +21,10 @@
       "out/**/*"
     ],
     "extraResources": [
-      { "from": "out", "to": "app/out" }
+      {
+        "from": "out",
+        "to": "app/out"
+      }
     ],
     "win": {
       "target": "nsis",
@@ -32,7 +33,9 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerLanguages": ["zh_CN"],
+      "installerLanguages": [
+        "zh_CN"
+      ],
       "language": "2052"
     },
     "mac": {
@@ -51,6 +54,8 @@
     "@radix-ui/react-select": "^2.3.0",
     "@radix-ui/react-tabs": "^1.1.14",
     "@tanstack/react-table": "^8.21.3",
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.17.0",
@@ -67,11 +72,13 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^10.0.3",
     "electron": "^42.4.0",
     "electron-builder": "^26.15.2",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vite": "^8.0.16",
     "wait-on": "^9.0.10"
   }
 }
