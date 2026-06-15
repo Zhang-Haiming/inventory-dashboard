@@ -14,7 +14,12 @@ const IS_ELECTRON = typeof window !== 'undefined' &&
 const GH_TOKEN = process.env.NEXT_PUBLIC_GH_TOKEN ?? ''
 const GH_OWNER = process.env.NEXT_PUBLIC_GH_OWNER ?? ''
 const GH_REPO  = process.env.NEXT_PUBLIC_GH_REPO ?? ''
-const GH_PATH  = 'data/inventory.json'
+
+const GH_PATHS = {
+  stockIn:    'data/stock_in.json',
+  stockOut:   'data/stock_out.json',
+  thresholds: 'data/thresholds.json',
+}
 
 // ---- GitHub API（Electron 走主进程 net 模块，Web 走服务端 API）----
 
@@ -28,38 +33,31 @@ declare global {
   interface Window { electronAPI?: ElectronAPI }
 }
 
-async function ghGet(): Promise<{ data: InventoryData; sha: string } | null> {
-  const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_PATH}`
+interface FileShas {
+  stockIn:    string | null
+  stockOut:   string | null
+  thresholds: string | null
+}
+
+// 读取单个 GitHub 文件（Electron 模式）
+async function ghReadFile(path: string): Promise<{ content: string; sha: string } | null> {
+  const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`
   const headers = {
     Authorization: `Bearer ${GH_TOKEN}`,
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
   }
-
-  let status: number
-  let text: string
-
-  if (IS_ELECTRON && window.electronAPI) {
-    const res = await window.electronAPI.githubRequest({ method: 'GET', url, headers })
-    status = res.status; text = res.text
-  } else {
-    const res = await fetch('/api/data')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const json = await res.json()
-    if (json.error) throw new Error(json.error)
-    if (json.isEmpty) return null
-    return { data: json.data, sha: json.sha }
-  }
-
-  if (status === 404) return null
-  if (status >= 400) throw new Error(`GitHub API ${status}`)
-  const json = JSON.parse(text)
+  const res = await window.electronAPI!.githubRequest({ method: 'GET', url, headers })
+  if (res.status === 404) return null
+  if (res.status >= 400) throw new Error(`GitHub API ${res.status}`)
+  const json = JSON.parse(res.text)
   const content = decodeURIComponent(escape(atob(json.content.replace(/\n/g, ''))))
-  return { data: JSON.parse(content), sha: json.sha }
+  return { content, sha: json.sha }
 }
 
-async function ghPut(data: InventoryData, sha: string | null): Promise<string> {
-  const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_PATH}`
+// 写入单个 GitHub 文件（Electron 模式）
+async function ghWriteFile(path: string, data: unknown, sha: string | null): Promise<string> {
+  const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`
   const headers = {
     Authorization: `Bearer ${GH_TOKEN}`,
     Accept: 'application/vnd.github+json',
@@ -67,32 +65,47 @@ async function ghPut(data: InventoryData, sha: string | null): Promise<string> {
     'Content-Type': 'application/json',
   }
   const body = JSON.stringify({
-    message: '📦 更新库存数据',
+    message: `📦 更新库存数据`,
     content: btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2)))),
     ...(sha ? { sha } : {}),
   })
+  const res = await window.electronAPI!.githubRequest({ method: 'PUT', url, headers, body })
+  if (res.status === 409) throw new Error('CONFLICT')
+  if (res.status >= 400) throw new Error(`GitHub API ${res.status}`)
+  return JSON.parse(res.text).content.sha
+}
 
-  let status: number
-  let text: string
-
-  if (IS_ELECTRON && window.electronAPI) {
-    const res = await window.electronAPI.githubRequest({ method: 'PUT', url, headers, body })
-    status = res.status; text = res.text
-  } else {
-    const res = await fetch('/api/data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data, sha }),
-    })
-    if (res.status === 409) throw new Error('CONFLICT')
-    if (!res.ok) { const j = await res.json(); throw new Error(j.error || `HTTP ${res.status}`) }
-    const j = await res.json()
-    return j.sha
+// 并行读取三个文件（Electron 模式）
+async function ghGetAll(): Promise<{ data: InventoryData; shas: FileShas } | null> {
+  const [inResult, outResult, thrResult] = await Promise.all([
+    ghReadFile(GH_PATHS.stockIn),
+    ghReadFile(GH_PATHS.stockOut),
+    ghReadFile(GH_PATHS.thresholds),
+  ])
+  if (!inResult && !outResult && !thrResult) return null
+  return {
+    data: {
+      lastUpdated: '',
+      stockIn:    inResult  ? JSON.parse(inResult.content)  : [],
+      stockOut:   outResult ? JSON.parse(outResult.content) : [],
+      thresholds: thrResult ? JSON.parse(thrResult.content) : {},
+    },
+    shas: {
+      stockIn:    inResult?.sha  ?? null,
+      stockOut:   outResult?.sha ?? null,
+      thresholds: thrResult?.sha ?? null,
+    },
   }
+}
 
-  if (status === 409) throw new Error('CONFLICT')
-  if (status >= 400) throw new Error(`GitHub API ${status}`)
-  return JSON.parse(text).content.sha
+// 并行写入三个文件（Electron 模式）
+async function ghPutAll(data: InventoryData, shas: FileShas): Promise<FileShas> {
+  const [newInSha, newOutSha, newThrSha] = await Promise.all([
+    ghWriteFile(GH_PATHS.stockIn,    data.stockIn,    shas.stockIn),
+    ghWriteFile(GH_PATHS.stockOut,   data.stockOut,   shas.stockOut),
+    ghWriteFile(GH_PATHS.thresholds, data.thresholds, shas.thresholds),
+  ])
+  return { stockIn: newInSha, stockOut: newOutSha, thresholds: newThrSha }
 }
 
 // ---- Excel 解析（前端 SheetJS）----
@@ -134,6 +147,8 @@ function parseExcelBuffer(buffer: ArrayBuffer) {
     出库数量: ['出库数量','数量','出库量','出库'],
     订单时间: ['订单时间','时间','日期','入库日期','出库日期'],
     商品分类: ['商品分类','分类','类别','品类'],
+    购买厂家: ['购买厂家','厂家','供应商','采购厂家','生产厂家'],
+    销售厂家: ['销售厂家','销售方','客户','买家'],
   }
 
   // 规范化列名，同时保留未识别的额外列（原样保留列名）
@@ -151,8 +166,8 @@ function parseExcelBuffer(buffer: ArrayBuffer) {
   }
 
   // 固定列之外的额外字段
-  const FIXED_IN  = new Set(['商品名称','商品代码','单价','入库数量','订单时间','商品分类'])
-  const FIXED_OUT = new Set(['商品名称','商品代码','单价','出库数量','订单时间','商品分类'])
+  const FIXED_IN  = new Set(['商品名称','商品代码','单价','入库数量','订单时间','商品分类','购买厂家'])
+  const FIXED_OUT = new Set(['商品名称','商品代码','单价','出库数量','订单时间','商品分类','销售厂家'])
 
   const inSheet  = findSheet(['入库表','入库','入库记录','StockIn'])
   const outSheet = findSheet(['出库表','出库','出库记录','StockOut'])
@@ -172,6 +187,7 @@ function parseExcelBuffer(buffer: ArrayBuffer) {
         入库数量: Number(r['入库数量'] ?? 0),
         订单时间: normalizeDate(r['订单时间']),
         商品分类: r['商品分类'] ? String(r['商品分类']) : undefined,
+        购买厂家: r['购买厂家'] ? String(r['购买厂家']) : undefined,
         ...extra,
       }
     })
@@ -189,6 +205,7 @@ function parseExcelBuffer(buffer: ArrayBuffer) {
         出库数量: Number(r['出库数量'] ?? 0),
         订单时间: normalizeDate(r['订单时间']),
         商品分类: r['商品分类'] ? String(r['商品分类']) : undefined,
+        销售厂家: r['销售厂家'] ? String(r['销售厂家']) : undefined,
         ...extra,
       }
     })
@@ -205,7 +222,7 @@ interface State {
   stockIn: StockInRow[]
   stockOut: StockOutRow[]
   thresholds: Thresholds
-  sha: string | null
+  shas: FileShas
   lastUpdated: string
   isEmpty: boolean
   isDirty: boolean
@@ -214,9 +231,11 @@ interface State {
   error: string | null
 }
 
+const EMPTY_SHAS: FileShas = { stockIn: null, stockOut: null, thresholds: null }
+
 const INITIAL_STATE: State = {
   stockIn: [], stockOut: [], thresholds: {},
-  sha: null, lastUpdated: '', isEmpty: false,
+  shas: EMPTY_SHAS, lastUpdated: '', isEmpty: false,
   isDirty: false, isLoading: true, isSaving: false, error: null,
 }
 
@@ -229,11 +248,22 @@ export function useInventoryData() {
   const loadData = useCallback(async () => {
     setState(s => ({ ...s, isLoading: true, error: null }))
     try {
-      const result = await ghGet()
-      if (!result) {
-        setState(s => ({ ...s, stockIn:[], stockOut:[], thresholds:{}, sha:null, lastUpdated:'', isEmpty:true, isDirty:false, isLoading:false, error:null }))
+      let result: { data: InventoryData; shas: FileShas } | null = null
+
+      if (IS_ELECTRON && window.electronAPI) {
+        result = await ghGetAll()
       } else {
-        setState(s => ({ ...s, ...result.data, sha:result.sha, isEmpty:false, isDirty:false, isLoading:false, error:null }))
+        const res = await fetch('/api/data')
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const json = await res.json()
+        if (json.error) throw new Error(json.error)
+        if (!json.isEmpty) result = { data: json.data, shas: json.shas }
+      }
+
+      if (!result) {
+        setState(s => ({ ...s, stockIn:[], stockOut:[], thresholds:{}, shas:EMPTY_SHAS, lastUpdated:'', isEmpty:true, isDirty:false, isLoading:false, error:null }))
+      } else {
+        setState(s => ({ ...s, ...result!.data, shas:result!.shas, isEmpty:false, isDirty:false, isLoading:false, error:null }))
       }
     } catch (err) {
       setState(s => ({ ...s, isLoading:false, error: err instanceof Error ? err.message : '加载失败' }))
@@ -251,12 +281,27 @@ export function useInventoryData() {
         lastUpdated: new Date().toISOString(),
         stockIn: s.stockIn, stockOut: s.stockOut, thresholds: s.thresholds,
       }
-      const newSha = await ghPut(data, s.sha)
-      setState(prev => ({ ...prev, sha:newSha, lastUpdated:data.lastUpdated, isDirty:false, isSaving:false, error:null }))
+
+      let newShas: FileShas
+      if (IS_ELECTRON && window.electronAPI) {
+        newShas = await ghPutAll(data, s.shas)
+      } else {
+        const res = await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data, shas: s.shas }),
+        })
+        const json = await res.json()
+        if (res.status === 409) throw new Error('其他人已更新数据，请刷新后重新编辑')
+        if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+        newShas = json.shas
+      }
+
+      setState(prev => ({ ...prev, shas:newShas, lastUpdated:data.lastUpdated, isDirty:false, isSaving:false, error:null }))
       return true
     } catch (err) {
       const msg = err instanceof Error ? err.message : '保存失败'
-      setState(prev => ({ ...prev, isSaving:false, error: msg === 'CONFLICT' ? '其他人已更新数据，请刷新后重新编辑' : msg }))
+      setState(prev => ({ ...prev, isSaving:false, error: msg }))
       return false
     }
   }, [])

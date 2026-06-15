@@ -23,7 +23,7 @@ type TabId = (typeof TABS)[number]['id']
 export default function DashboardPage() {
   const {
     stockIn, stockOut, thresholds,
-    sha, lastUpdated, isEmpty,
+    lastUpdated, isEmpty,
     isDirty, isLoading, isSaving, error,
     loadData, saveToGitHub, importFromUpload, parseAndImport, pickAndImport, exportExcel,
     addStockInRow, updateStockInRow, deleteStockInRow,

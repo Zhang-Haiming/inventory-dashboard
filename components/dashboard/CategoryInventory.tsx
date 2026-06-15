@@ -4,6 +4,7 @@ import { AlertTriangle } from 'lucide-react'
 import { getCategoryInventory, getAllCategories } from '@/lib/dataUtils'
 import { formatQty } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import type { StockInRow, StockOutRow, Thresholds } from '@/lib/types'
 
 interface Props {
@@ -19,6 +20,7 @@ export function CategoryInventory({ stockIn, stockOut, thresholds }: Props) {
   )
   const categories = useMemo(() => getAllCategories(inventory), [inventory])
   const [filterCategory, setFilterCategory] = useState<string>('全部')
+  const [filterText, setFilterText] = useState('')
   const [showLowOnly, setShowLowOnly] = useState(false)
 
   const lowCount = inventory.filter((p) => p.isLow).length
@@ -28,16 +30,27 @@ export function CategoryInventory({ stockIn, stockOut, thresholds }: Props) {
     if (filterCategory !== '全部') {
       list = list.filter((p) => p.商品分类 === filterCategory)
     }
+    if (filterText) {
+      list = list.filter((p) =>
+        p.商品名称.includes(filterText) || p.商品代码.includes(filterText)
+      )
+    }
     if (showLowOnly) {
       list = list.filter((p) => p.isLow)
     }
     return list
-  }, [inventory, filterCategory, showLowOnly])
+  }, [inventory, filterCategory, filterText, showLowOnly])
 
   return (
     <div className="space-y-4">
       {/* 过滤栏 */}
       <div className="flex flex-wrap items-center gap-3">
+        <Input
+          placeholder="搜索商品名称或代码..."
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+          className="max-w-xs"
+        />
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-slate-700">分类：</label>
           <select

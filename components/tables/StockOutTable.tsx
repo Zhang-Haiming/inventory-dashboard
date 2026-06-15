@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { formatAmount } from '@/lib/utils'
 import type { StockOutRow } from '@/lib/types'
 
-const FIXED_COLS = ['商品名称', '商品代码', '商品分类', '单价', '出库数量', '订单时间']
+const FIXED_COLS = ['商品名称', '商品代码', '商品分类', '单价', '出库数量', '订单时间', '销售厂家']
 
 interface Props {
   rows: StockOutRow[]
@@ -56,6 +56,7 @@ export function StockOutTable({ rows, onUpdate, onDelete, onAdd }: Props) {
       出库数量: 1,
       订单时间: today,
       商品分类: '',
+      销售厂家: '',
     })
   }
 
@@ -90,6 +91,7 @@ export function StockOutTable({ rows, onUpdate, onDelete, onAdd }: Props) {
               <th className="text-right py-3 px-3 font-medium text-slate-600 min-w-[80px]">出库数量</th>
               <th className="text-right py-3 px-3 font-medium text-slate-600 min-w-[100px]">金额</th>
               <th className="text-left py-3 px-3 font-medium text-slate-600 min-w-[110px]">订单时间</th>
+              <th className="text-left py-3 px-3 font-medium text-slate-600 min-w-[110px]">销售厂家</th>
               {extraCols.map(col => (
                 <th key={col} className="text-left py-3 px-3 font-medium text-slate-600 min-w-[100px]">
                   {col}
@@ -133,6 +135,9 @@ export function StockOutTable({ rows, onUpdate, onDelete, onAdd }: Props) {
                 </td>
                 <td className="py-2 px-3">
                   <EditableCell value={String(row.订单时间 ?? '')} onSave={(v) => onUpdate(row.id, '订单时间', v)} type="date" />
+                </td>
+                <td className="py-2 px-3">
+                  <EditableCell value={String(row.销售厂家 ?? '')} onSave={(v) => onUpdate(row.id, '销售厂家', v)} placeholder="输入销售厂家" />
                 </td>
                 {extraCols.map(col => (
                   <td key={col} className="py-2 px-3">

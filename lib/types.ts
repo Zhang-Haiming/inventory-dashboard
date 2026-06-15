@@ -11,6 +11,7 @@ export type StockInRow = {
   入库数量: number
   订单时间: string  // ISO 日期字符串 YYYY-MM-DD
   商品分类?: string
+  购买厂家?: string
 } & ExtraFields
 
 export type StockOutRow = {
@@ -21,6 +22,7 @@ export type StockOutRow = {
   出库数量: number
   订单时间: string
   商品分类?: string
+  销售厂家?: string
 } & ExtraFields
 
 // thresholds: 商品代码 -> 最低库存警戒线（0 表示不报警）
