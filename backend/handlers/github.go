@@ -17,7 +17,7 @@ type ghEnv struct {
 	token  string
 	owner  string
 	repo   string
-	branch string // GH_DATA_BRANCH，如 "data-tauri"，默认 "main"
+	branch string // GH_DATA_BRANCH，默认为当前代码分支 "feat/tauri-go-rewrite"
 }
 
 // getenv 优先读新变量名，回退到旧变量名（兼容旧 .env.local）
@@ -39,7 +39,7 @@ func loadGhEnv() (ghEnv, error) {
 		return e, fmt.Errorf("缺少环境变量：GH_TOKEN / GH_OWNER / GH_REPO")
 	}
 	if e.branch == "" {
-		e.branch = "main" // 默认写 main branch（兼容旧版本）
+		e.branch = "feat/tauri-go-rewrite" // 数据和代码同住一个分支
 	}
 	return e, nil
 }
