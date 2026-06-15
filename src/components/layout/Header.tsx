@@ -1,4 +1,3 @@
-'use client'
 import { useState } from 'react'
 import { Upload, Download, Save, BarChart2, RefreshCw, Settings, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -15,46 +14,40 @@ interface Props {
   stockOut: StockOutRow[]
   thresholds: Thresholds
   lowStockCount: number
-  isElectron: boolean
   onSave: () => void
   onRefresh: () => void
   onImport: (stockIn: StockInRow[], stockOut: StockOutRow[]) => void
   onExport: () => void
   onThresholdsSave: (thresholds: Thresholds) => void
-  parseAndImport?: (file: File) => Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number }>
-  pickAndImport?: () => Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number } | null>
+  parseAndImport: (file: File) => Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number }>
+  pickAndImport: () => Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number } | null>
 }
 
 export function Header({
   isDirty, isSaving, isLoading, lastUpdated,
   stockIn, stockOut, thresholds, lowStockCount,
-  isElectron,
   onSave, onRefresh, onImport, onExport, onThresholdsSave,
   parseAndImport, pickAndImport,
 }: Props) {
   const [uploadOpen, setUploadOpen] = useState(false)
-
   const [thresholdOpen, setThresholdOpen] = useState(false)
 
   const lastUpdatedStr = lastUpdated
     ? new Date(lastUpdated).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : ''
 
-  // Electron 模式：直接弹系统文件选择框；Web 模式：弹 Modal
+  // Tauri：优先弹系统文件选择框，失败则降级到拖拽 Modal
   const handleUploadClick = async () => {
-    if (isElectron && pickAndImport) {
+    try {
       const result = await pickAndImport()
-      if (result === null) {
-        // electronAPI 未注入，降级到 Modal
-        setUploadOpen(true)
-        return
-      }
+      if (result === null) return // 用户取消
       if (result.warnings.length > 0) {
         alert(`导入成功（入库 ${result.stockInCount} 条，出库 ${result.stockOutCount} 条）\n\n注意：\n${result.warnings.join('\n')}`)
       } else {
         alert(`导入成功！入库 ${result.stockInCount} 条，出库 ${result.stockOutCount} 条`)
       }
-    } else {
+    } catch {
+      // 降级：弹拖拽 Modal
       setUploadOpen(true)
     }
   }
@@ -63,7 +56,6 @@ export function Header({
     <>
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3 flex-wrap">
-          {/* 标题 */}
           <div className="flex items-center gap-2 mr-auto">
             <BarChart2 className="h-6 w-6 text-slate-700" />
             <div>
@@ -74,7 +66,6 @@ export function Header({
             </div>
           </div>
 
-          {/* 低库存提示 */}
           {lowStockCount > 0 && (
             <div className="flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">
               <AlertTriangle className="h-3.5 w-3.5" />
@@ -82,7 +73,6 @@ export function Header({
             </div>
           )}
 
-          {/* 操作按钮 */}
           <Button variant="ghost" size="sm" onClick={onRefresh} disabled={isLoading} title="刷新数据">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline ml-1">刷新</span>
@@ -115,7 +105,6 @@ export function Header({
         </div>
       </header>
 
-      {/* 始终渲染 Modal 作为 fallback（Electron 优先用系统对话框，不可用时降级到此）*/}
       <UploadModal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}

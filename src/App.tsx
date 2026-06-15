@@ -24,7 +24,7 @@ export default function App() {
     stockIn, stockOut, thresholds,
     lastUpdated, isEmpty,
     isDirty, isLoading, isSaving, error,
-    loadData, saveToGitHub, importFromUpload, parseAndImport, exportExcel,
+    loadData, refreshFromGitHub, saveToGitHub, importFromUpload, parseAndImport, pickAndImport, exportExcel,
     addStockInRow, updateStockInRow, deleteStockInRow,
     addStockOutRow, updateStockOutRow, deleteStockOutRow,
     setThresholds,
@@ -54,10 +54,11 @@ export default function App() {
           lastUpdated={lastUpdated}
           stockIn={stockIn} stockOut={stockOut} thresholds={thresholds}
           lowStockCount={0}
-          onSave={saveToGitHub} onRefresh={loadData}
+          onSave={saveToGitHub} onRefresh={refreshFromGitHub}
           onImport={importFromUpload} onExport={handleExport}
           onThresholdsSave={setThresholds}
           parseAndImport={parseAndImport}
+          pickAndImport={pickAndImport}
         />
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
@@ -79,10 +80,11 @@ export default function App() {
         lastUpdated={lastUpdated}
         stockIn={stockIn} stockOut={stockOut} thresholds={thresholds}
         lowStockCount={lowStockCount}
-        onSave={saveToGitHub} onRefresh={loadData}
+        onSave={saveToGitHub} onRefresh={refreshFromGitHub}
         onImport={importFromUpload} onExport={handleExport}
         onThresholdsSave={setThresholds}
         parseAndImport={parseAndImport}
+        pickAndImport={pickAndImport}
       />
 
       {error && (

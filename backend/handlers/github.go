@@ -11,15 +11,44 @@ import (
 	"time"
 )
 
-// SyncGitHub 从临时 JSON 文件读取库存数据，同步到 GitHub。
+// ghEnv 从环境变量读取 GitHub 配置
+// 环境变量由 Tauri 在启动时通过 tauri.conf.json 的 env 字段注入
+type ghEnv struct {
+	token  string
+	owner  string
+	repo   string
+	branch string // GH_DATA_BRANCH，如 "data-tauri"，默认 "main"
+}
+
+func loadGhEnv() (ghEnv, error) {
+	e := ghEnv{
+		token:  os.Getenv("GH_TOKEN"),
+		owner:  os.Getenv("GH_OWNER"),
+		repo:   os.Getenv("GH_REPO"),
+		branch: os.Getenv("GH_DATA_BRANCH"),
+	}
+	if e.token == "" || e.owner == "" || e.repo == "" {
+		return e, fmt.Errorf("缺少环境变量：GH_TOKEN / GH_OWNER / GH_REPO")
+	}
+	if e.branch == "" {
+		e.branch = "main" // 默认写 main branch（兼容旧版本）
+	}
+	return e, nil
+}
+
+// 三个数据文件的固定路径（branch 不同，路径相同）
+var dataPaths = struct{ stockIn, stockOut, thresholds string }{
+	stockIn:    "data/stock_in.json",
+	stockOut:   "data/stock_out.json",
+	thresholds: "data/thresholds.json",
+}
+
+// SyncGitHub 从临时 JSON 文件读取库存数据，推送到 GH_DATA_BRANCH。
 // 用法：sync --data-file <path>
-// 环境变量：GH_TOKEN、GH_OWNER、GH_REPO（由 Tauri 在启动时通过 tauri.conf.json env 注入）
 func SyncGitHub(args []string) error {
-	token := os.Getenv("GH_TOKEN")
-	owner := os.Getenv("GH_OWNER")
-	repo  := os.Getenv("GH_REPO")
-	if token == "" || owner == "" || repo == "" {
-		return fmt.Errorf("缺少环境变量：GH_TOKEN / GH_OWNER / GH_REPO")
+	env, err := loadGhEnv()
+	if err != nil {
+		return err
 	}
 
 	var dataFile string
@@ -47,20 +76,25 @@ func SyncGitHub(args []string) error {
 		return fmt.Errorf("解析数据文件失败: %w", err)
 	}
 
+	client := &ghClient{ghEnv: env}
+
+	// 确保目标 branch 存在（首次同步时自动创建）
+	if err := client.ensureBranchExists(); err != nil {
+		return fmt.Errorf("确保 branch 存在失败: %w", err)
+	}
+
 	msg := fmt.Sprintf("📦 更新库存数据 %s", time.Now().Format("2006-01-02"))
-	client := &ghClient{token: token, owner: owner, repo: repo}
 
 	type task struct {
 		path string
 		data json.RawMessage
 	}
 	tasks := []task{
-		{"data/stock_in.json",    payload.StockIn},
-		{"data/stock_out.json",   payload.StockOut},
-		{"data/thresholds.json",  payload.Thresholds},
+		{dataPaths.stockIn,    payload.StockIn},
+		{dataPaths.stockOut,   payload.StockOut},
+		{dataPaths.thresholds, payload.Thresholds},
 	}
 
-	// 并发推送三个文件
 	errs := make(chan error, len(tasks))
 	for _, t := range tasks {
 		go func(t task) {
@@ -75,14 +109,67 @@ func SyncGitHub(args []string) error {
 	return nil
 }
 
+// PullFromGitHub 从 GH_DATA_BRANCH 拉取三个 JSON 文件，合并后输出到 stdout。
+// Rust 收到 stdout 后写入 SQLite。
+// 用法：pull
+func PullFromGitHub(_ []string) error {
+	env, err := loadGhEnv()
+	if err != nil {
+		return err
+	}
+	client := &ghClient{ghEnv: env}
+
+	type fileResult struct {
+		key     string
+		content json.RawMessage
+		err     error
+	}
+
+	paths := map[string]string{
+		"stock_in":    dataPaths.stockIn,
+		"stock_out":   dataPaths.stockOut,
+		"thresholds":  dataPaths.thresholds,
+	}
+
+	results := make(chan fileResult, len(paths))
+	for key, path := range paths {
+		go func(key, path string) {
+			content, err := client.getFileContent(path)
+			results <- fileResult{key: key, content: content, err: err}
+		}(key, path)
+	}
+
+	payload := make(map[string]json.RawMessage, 3)
+	for range paths {
+		r := <-results
+		if r.err != nil {
+			return fmt.Errorf("拉取 %s 失败: %w", r.key, r.err)
+		}
+		if r.content == nil {
+			// 文件不存在，用空数组/对象兜底
+			switch r.key {
+			case "thresholds":
+				payload[r.key] = json.RawMessage("{}")
+			default:
+				payload[r.key] = json.RawMessage("[]")
+			}
+		} else {
+			payload[r.key] = r.content
+		}
+	}
+
+	return json.NewEncoder(os.Stdout).Encode(payload)
+}
+
 // ---- GitHub API 客户端 ----
 
 type ghClient struct {
-	token, owner, repo string
+	ghEnv
 }
 
 func (c *ghClient) apiURL(path string) string {
-	return fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", c.owner, c.repo, path)
+	return fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s",
+		c.owner, c.repo, path)
 }
 
 func (c *ghClient) headers() map[string]string {
@@ -94,9 +181,10 @@ func (c *ghClient) headers() map[string]string {
 	}
 }
 
-// getFileSHA 获取文件当前的 SHA（文件不存在返回 ""）
+// getFileSHA 获取指定 branch 上文件的 SHA（不存在返回 ""）
 func (c *ghClient) getFileSHA(path string) (string, error) {
-	req, _ := http.NewRequest("GET", c.apiURL(path), nil)
+	url := c.apiURL(path) + "?ref=" + c.branch
+	req, _ := http.NewRequest("GET", url, nil)
 	for k, v := range c.headers() {
 		req.Header.Set(k, v)
 	}
@@ -119,14 +207,47 @@ func (c *ghClient) getFileSHA(path string) (string, error) {
 	return result.SHA, nil
 }
 
-// putFile 写入单个文件到 GitHub
+// getFileContent 获取指定 branch 上文件的内容（不存在返回 nil）
+func (c *ghClient) getFileContent(path string) (json.RawMessage, error) {
+	url := c.apiURL(path) + "?ref=" + c.branch
+	req, _ := http.NewRequest("GET", url, nil)
+	for k, v := range c.headers() {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 404 {
+		return nil, nil
+	}
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitHub API %d: %s", resp.StatusCode, body)
+	}
+	var result struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	decoded, err := base64.StdEncoding.DecodeString(
+		strings.ReplaceAll(result.Content, "\n", ""),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(decoded), nil
+}
+
+// putFile 写入单个文件到指定 branch
 func (c *ghClient) putFile(path string, data json.RawMessage, message string) error {
 	sha, err := c.getFileSHA(path)
 	if err != nil {
 		return fmt.Errorf("获取 %s SHA 失败: %w", path, err)
 	}
 
-	// JSON 格式化后 base64 编码
 	var pretty strings.Builder
 	enc := json.NewEncoder(&pretty)
 	enc.SetIndent("", "  ")
@@ -137,6 +258,7 @@ func (c *ghClient) putFile(path string, data json.RawMessage, message string) er
 	body := map[string]any{
 		"message": message,
 		"content": base64.StdEncoding.EncodeToString([]byte(pretty.String())),
+		"branch":  c.branch, // ← 指定目标 branch
 	}
 	if sha != "" {
 		body["sha"] = sha
@@ -158,6 +280,73 @@ func (c *ghClient) putFile(path string, data json.RawMessage, message string) er
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("GitHub API %d: %s", resp.StatusCode, b)
+	}
+	return nil
+}
+
+// ensureBranchExists 检查 branch 是否存在，不存在则从默认 branch 创建
+func (c *ghClient) ensureBranchExists() error {
+	if c.branch == "main" || c.branch == "master" {
+		return nil // 主 branch 必然存在
+	}
+
+	// 检查 branch 是否存在
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/branches/%s",
+		c.owner, c.repo, c.branch)
+	req, _ := http.NewRequest("GET", url, nil)
+	for k, v := range c.headers() {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode == 200 {
+		return nil // 已存在
+	}
+
+	// 获取默认 branch 的最新 commit SHA
+	refURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/refs/heads/main",
+		c.owner, c.repo)
+	req, _ = http.NewRequest("GET", refURL, nil)
+	for k, v := range c.headers() {
+		req.Header.Set(k, v)
+	}
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	var ref struct {
+		Object struct {
+			SHA string `json:"sha"`
+		} `json:"object"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ref); err != nil {
+		return err
+	}
+
+	// 创建新 branch
+	createURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/refs",
+		c.owner, c.repo)
+	body, _ := json.Marshal(map[string]string{
+		"ref": "refs/heads/" + c.branch,
+		"sha": ref.Object.SHA,
+	})
+	req, _ = http.NewRequest("POST", createURL, strings.NewReader(string(body)))
+	for k, v := range c.headers() {
+		req.Header.Set(k, v)
+	}
+	resp2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp2.Body)
+		return fmt.Errorf("创建 branch 失败 %d: %s", resp2.StatusCode, b)
 	}
 	return nil
 }

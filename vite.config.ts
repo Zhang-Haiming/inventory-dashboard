@@ -12,7 +12,7 @@ export default defineConfig({
   // Tauri 要求：不使用 localhost，改用 127.0.0.1
   server: {
     host: '127.0.0.1',
-    port: 5173,
+    port: 5175,
     strictPort: true,
   },
   // 生产构建输出到 dist/，tauri.conf.json 里 frontendDist 指向这里

@@ -65,6 +65,17 @@ export function useInventoryData() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  // ---- 从 GH_DATA_BRANCH 拉取最新数据，写入 SQLite 后刷新界面 ----
+  const refreshFromGitHub = useCallback(async () => {
+    setState(s => ({ ...s, isLoading: true, error: null }))
+    try {
+      await invoke('pull_from_github')
+      await loadData()           // 重新从 SQLite 读到界面
+    } catch (err) {
+      setState(s => ({ ...s, isLoading: false, error: err instanceof Error ? err.message : '拉取失败' }))
+    }
+  }, [loadData])
+
   // ---- 保存到本地 SQLite（Rust）----
   const saveLocal = useCallback(async () => {
     const s = stateRef.current
@@ -203,7 +214,7 @@ export function useInventoryData() {
 
   return {
     ...state,
-    loadData, saveToGitHub, saveLocal,
+    loadData, refreshFromGitHub, saveToGitHub, saveLocal,
     importFromUpload, parseAndImport, pickAndImport, exportExcel,
     addStockInRow, updateStockInRow, deleteStockInRow,
     addStockOutRow, updateStockOutRow, deleteStockOutRow,

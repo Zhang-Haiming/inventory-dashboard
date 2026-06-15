@@ -7,6 +7,10 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 开发时从项目根目录的 .env.local 加载 GitHub 配置
+    // 生产打包后此文件不存在，env vars 需通过其他方式注入（todo：设置界面）
+    let _ = dotenvy::from_filename(".env.local");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())
         .plugin(tauri_plugin_dialog::init())
@@ -29,6 +33,7 @@ pub fn run() {
             commands::load_data,
             commands::save_data,
             commands::sync_github,
+            commands::pull_from_github,
             commands::parse_excel,
             commands::parse_excel_path,
             commands::export_excel,

@@ -7,7 +7,8 @@
 //   parse-excel --base64 <base64>   解析 base64 编码的 Excel 文件
 //   parse-excel --path <path>       解析磁盘上的 Excel 文件
 //   export-excel --path <p> --data <json>  生成 Excel 文件到指定路径
-//   sync                            同步数据到 GitHub
+//   sync --data-file <path>         推送本地数据到 GH_DATA_BRANCH
+//   pull                            从 GH_DATA_BRANCH 拉取数据（输出 JSON 到 stdout）
 package main
 
 import (
@@ -40,6 +41,10 @@ func main() {
 	case "sync":
 		err := handlers.SyncGitHub(os.Args[2:])
 		exitOnErr(err, "sync")
+
+	case "pull":
+		err := handlers.PullFromGitHub(os.Args[2:])
+		exitOnErr(err, "pull")
 
 	default:
 		fmt.Fprintf(os.Stderr, "未知子命令: %s\n", os.Args[1])

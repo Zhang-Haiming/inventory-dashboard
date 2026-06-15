@@ -213,3 +213,55 @@ pub async fn export_excel(
     }
     Ok(())
 }
+
+/// 从 GH_DATA_BRANCH 拉取数据，写入本地 SQLite
+/// 前端调用场景：点击「刷新」按钮，或首次启动时 SQLite 为空
+#[tauri::command]
+pub async fn pull_from_github(app: tauri::AppHandle, db: State<'_, DbState>) -> Result<(), String> {
+    use tauri_plugin_shell::ShellExt;
+
+    let output = app
+        .shell()
+        .sidecar("backend")
+        .map_err(|e| e.to_string())?
+        .args(["pull"])
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("拉取失败: {}", stderr));
+    }
+
+    // Go 输出的 JSON：{ "stock_in": [...], "stock_out": [...], "thresholds": {...} }
+    #[derive(serde::Deserialize)]
+    struct PullPayload {
+        stock_in:   Vec<StockInRow>,
+        stock_out:  Vec<StockOutRow>,
+        thresholds: std::collections::HashMap<String, i64>,
+    }
+
+    let stdout = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
+    let pulled: PullPayload = serde_json::from_str(&stdout).map_err(|e| e.to_string())?;
+
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::clear_all(&conn).map_err(|e| e.to_string())?;
+    db::upsert_stock_in(&conn, &pulled.stock_in).map_err(|e| e.to_string())?;
+    db::upsert_stock_out(&conn, &pulled.stock_out).map_err(|e| e.to_string())?;
+    db::upsert_thresholds(&conn, &pulled.thresholds).map_err(|e| e.to_string())?;
+    db::set_meta(&conn, "last_updated", &chrono_now()).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+fn chrono_now() -> String {
+    // 使用系统时间格式化 ISO 8601（不引入 chrono 依赖）
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // 简单格式化：只需要记录时间戳字符串
+    format!("{}", secs)
+}
