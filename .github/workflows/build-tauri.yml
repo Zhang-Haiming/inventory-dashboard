@@ -232,7 +232,7 @@ jobs:
             GITHUB_TOKEN=ghp_xxxx
             GITHUB_OWNER=your_username
             GITHUB_REPO=your_repo
-            GH_DATA_BRANCH=feat/tauri-go-rewrite
+            GH_DATA_BRANCH=tauri
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

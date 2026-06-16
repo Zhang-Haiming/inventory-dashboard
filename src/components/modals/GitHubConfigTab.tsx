@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { GitHubConfig } from '@/lib/types'
 
-const EMPTY_CONFIG: GitHubConfig = { token: '', owner: '', repo: '', data_branch: 'feat/tauri-go-rewrite' }
+const EMPTY_CONFIG: GitHubConfig = { token: '', owner: '', repo: '', data_branch: 'tauri' }
 
 function toMsg(err: unknown): string {
   if (typeof err === 'string') return err
