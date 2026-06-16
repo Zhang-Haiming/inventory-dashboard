@@ -43,9 +43,8 @@ jobs:
       - run: npm install
 
       - name: Build Tauri (macOS)
-        run: cargo tauri build
+        run: cargo tauri build --bundles dmg
         env:
-          # 签名关闭，免费分发（用户需手动执行 xattr -cr）
           APPLE_SIGNING_IDENTITY: "-"
 
       - uses: actions/upload-artifact@v4
@@ -93,7 +92,7 @@ jobs:
       - run: npm ci
 
       - name: Build Tauri (Windows x64)
-        run: cargo tauri build --target x86_64-pc-windows-msvc
+        run: cargo tauri build --target x86_64-pc-windows-msvc --bundles nsis
 
       - name: Rename installer (添加 x64 后缀)
         shell: pwsh
@@ -149,7 +148,7 @@ jobs:
       - run: npm ci
 
       - name: Build Tauri (Windows 32 位)
-        run: cargo tauri build --target i686-pc-windows-msvc
+        run: cargo tauri build --target i686-pc-windows-msvc --bundles nsis
 
       - name: Rename installer (添加 32bit 后缀)
         shell: pwsh
