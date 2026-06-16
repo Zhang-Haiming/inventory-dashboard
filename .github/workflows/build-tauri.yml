@@ -40,7 +40,7 @@ jobs:
           GOOS=darwin GOARCH=arm64 go build \
             -o ../src-tauri/binaries/backend-aarch64-apple-darwin .
 
-      - run: npm ci
+      - run: npm install
 
       - name: Build Tauri (macOS)
         run: cargo tauri build
@@ -228,12 +228,12 @@ jobs:
 
             ## ⚠️ 首次使用配置
 
-            安装后在 App 目录旁创建 `.env.local` 文件，填入 GitHub 配置：
+            也可在 App 内「GitHub 配置」Tab 直接填写，或创建 `.env.local`：
             ```
             GITHUB_TOKEN=ghp_xxxx
             GITHUB_OWNER=your_username
             GITHUB_REPO=your_repo
-            GH_DATA_BRANCH=data-tauri
+            GH_DATA_BRANCH=feat/tauri-go-rewrite
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
