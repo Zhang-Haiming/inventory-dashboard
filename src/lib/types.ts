@@ -69,6 +69,14 @@ export interface UploadApiResponse {
   warnings: string[]
 }
 
+// ---- 公司 ----
+
+export interface Company {
+  id:   string
+  name: string
+  slug: string
+}
+
 // ---- GitHub 配置 ----
 
 export interface GitHubConfig {

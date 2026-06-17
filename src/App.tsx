@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { BarChart2, Package, AlertTriangle, ListOrdered, PackageOpen, Settings2 } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { MonthlySummary } from '@/components/dashboard/MonthlySummary'
@@ -9,6 +10,7 @@ import { StockOutTable } from '@/components/tables/StockOutTable'
 import { GitHubConfigTab } from '@/components/modals/GitHubConfigTab'
 import { useInventoryData } from '@/hooks/useInventoryData'
 import { getCategoryInventory, getLowStockItems } from '@/lib/dataUtils'
+import type { Company } from '@/lib/types'
 
 const TABS = [
   { id: 'summary',   label: '月度统计',   icon: BarChart2 },
@@ -34,6 +36,26 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<TabId>('summary')
 
+  // ---- 公司状态 ----
+  const [companies,      setCompanies]      = useState<Company[]>([])
+  const [currentCompany, setCurrentCompany] = useState<Company | null>(null)
+
+  const loadCompanies = useCallback(async () => {
+    const list = await invoke<Company[]>('list_companies').catch(() => [] as Company[])
+    setCompanies(list)
+    const cur = await invoke<Company>('get_current_company').catch(() => null)
+    setCurrentCompany(cur)
+  }, [])
+
+  useEffect(() => { loadCompanies() }, [loadCompanies])
+
+  const handleSwitchCompany = useCallback(async (id: string) => {
+    await invoke('switch_company', { id }).catch(() => null)
+    const cur = companies.find(c => c.id === id) ?? null
+    setCurrentCompany(cur)
+    loadData()   // 重新加载新公司数据
+  }, [companies, loadData])
+
   const lowStockCount = useMemo(() => {
     const inv = getCategoryInventory(stockIn, stockOut, thresholds)
     return getLowStockItems(inv).length
@@ -57,6 +79,8 @@ export default function App() {
           lastUpdated={lastUpdated}
           stockIn={stockIn} stockOut={stockOut} thresholds={thresholds}
           lowStockCount={0}
+          companies={companies} currentCompany={currentCompany}
+          onSwitchCompany={handleSwitchCompany} onRefreshCompanies={loadCompanies}
           onSave={saveToGitHub} onRefresh={refreshFromGitHub}
           onImport={importFromUpload} onExport={handleExport}
           onThresholdsSave={setThresholds}
@@ -83,6 +107,8 @@ export default function App() {
         lastUpdated={lastUpdated}
         stockIn={stockIn} stockOut={stockOut} thresholds={thresholds}
         lowStockCount={lowStockCount}
+        companies={companies} currentCompany={currentCompany}
+        onSwitchCompany={handleSwitchCompany} onRefreshCompanies={loadCompanies}
         onSave={saveToGitHub} onRefresh={refreshFromGitHub}
         onImport={importFromUpload} onExport={handleExport}
         onThresholdsSave={setThresholds}

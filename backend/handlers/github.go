@@ -44,29 +44,39 @@ func loadGhEnv() (ghEnv, error) {
 	return e, nil
 }
 
-// 三个数据文件的固定路径（branch 不同，路径相同）
-var dataPaths = struct{ stockIn, stockOut, thresholds string }{
-	stockIn:    "data/stock_in.json",
-	stockOut:   "data/stock_out.json",
-	thresholds: "data/thresholds.json",
+// dataPaths 返回指定公司的三个数据文件路径（data/{slug}/ 子目录）
+func dataPaths(slug string) (stockIn, stockOut, thresholds string) {
+	base := "data/" + slug
+	return base + "/stock_in.json", base + "/stock_out.json", base + "/thresholds.json"
+}
+
+// parseArgs 从 args 里读取 --key value 形式的参数
+func parseArgs(args []string) map[string]string {
+	m := make(map[string]string)
+	for i := 0; i < len(args)-1; i++ {
+		if len(args[i]) > 2 && args[i][:2] == "--" {
+			m[args[i][2:]] = args[i+1]
+		}
+	}
+	return m
 }
 
 // SyncGitHub 从临时 JSON 文件读取库存数据，推送到 GH_DATA_BRANCH。
-// 用法：sync --data-file <path>
+// 用法：sync --data-file <path> --company-slug <slug>
 func SyncGitHub(args []string) error {
 	env, err := loadGhEnv()
 	if err != nil {
 		return err
 	}
 
-	var dataFile string
-	for i := 0; i < len(args)-1; i++ {
-		if args[i] == "--data-file" {
-			dataFile = args[i+1]
-		}
-	}
+	params := parseArgs(args)
+	dataFile := params["data-file"]
+	slug     := params["company-slug"]
 	if dataFile == "" {
 		return fmt.Errorf("缺少 --data-file 参数")
+	}
+	if slug == "" {
+		slug = "default"
 	}
 
 	f, err := os.Open(dataFile)
@@ -91,6 +101,7 @@ func SyncGitHub(args []string) error {
 		return fmt.Errorf("确保 branch 存在失败: %w", err)
 	}
 
+	pathIn, pathOut, pathThr := dataPaths(slug)
 	msg := fmt.Sprintf("📦 更新库存数据 %s", time.Now().Format("2006-01-02"))
 
 	// 顺序写入：三个文件依次提交，避免并发 commit 导致 GitHub 409
@@ -99,9 +110,9 @@ func SyncGitHub(args []string) error {
 		data json.RawMessage
 	}
 	tasks := []task{
-		{dataPaths.stockIn,    payload.StockIn},
-		{dataPaths.stockOut,   payload.StockOut},
-		{dataPaths.thresholds, payload.Thresholds},
+		{pathIn,  payload.StockIn},
+		{pathOut, payload.StockOut},
+		{pathThr, payload.Thresholds},
 	}
 	for _, t := range tasks {
 		if err := client.putFile(t.path, t.data, msg); err != nil {
@@ -113,13 +124,19 @@ func SyncGitHub(args []string) error {
 
 // PullFromGitHub 从 GH_DATA_BRANCH 拉取三个 JSON 文件，合并后输出到 stdout。
 // Rust 收到 stdout 后写入 SQLite。
-// 用法：pull
-func PullFromGitHub(_ []string) error {
+// 用法：pull --company-slug <slug>
+func PullFromGitHub(args []string) error {
 	env, err := loadGhEnv()
 	if err != nil {
 		return err
 	}
 	client := &ghClient{ghEnv: env}
+
+	params := parseArgs(args)
+	slug := params["company-slug"]
+	if slug == "" {
+		slug = "default"
+	}
 
 	type fileResult struct {
 		key     string
@@ -127,10 +144,11 @@ func PullFromGitHub(_ []string) error {
 		err     error
 	}
 
+	pathIn, pathOut, pathThr := dataPaths(slug)
 	paths := map[string]string{
-		"stock_in":    dataPaths.stockIn,
-		"stock_out":   dataPaths.stockOut,
-		"thresholds":  dataPaths.thresholds,
+		"stock_in":   pathIn,
+		"stock_out":  pathOut,
+		"thresholds": pathThr,
 	}
 
 	results := make(chan fileResult, len(paths))

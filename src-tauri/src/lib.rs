@@ -59,6 +59,12 @@ pub fn run() {
             commands::export_excel,
             commands::get_github_config,
             commands::save_github_config,
+            commands::list_companies,
+            commands::get_current_company,
+            commands::add_company,
+            commands::rename_company,
+            commands::delete_company,
+            commands::switch_company,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
