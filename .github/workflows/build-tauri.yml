@@ -47,18 +47,18 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: "-"
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Sign macOS bundle
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           DMG=$(find src-tauri/target/release/bundle/dmg -name "*.dmg" | head -1)
           echo "Signing: $DMG"
           cargo tauri signer sign \
             --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
-            --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+            --password "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" \
             "$DMG"
           echo "=== Files after signing ==="
           ls -la src-tauri/target/release/bundle/dmg/
@@ -113,16 +113,17 @@ jobs:
         run: cargo tauri build --target x86_64-pc-windows-msvc --bundles nsis
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Sign Windows x64 bundle
         shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $exe = Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe" | Select-Object -First 1
           Write-Host "Signing: $($exe.FullName)"
-          cargo tauri signer sign --private-key "$env:TAURI_SIGNING_PRIVATE_KEY" --password "" "$($exe.FullName)"
+          cargo tauri signer sign --private-key "$env:TAURI_SIGNING_PRIVATE_KEY" --password "$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$($exe.FullName)"
           Write-Host "=== Files after signing ==="
           Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/"
 
@@ -188,16 +189,17 @@ jobs:
         run: cargo tauri build --target i686-pc-windows-msvc --bundles nsis
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Sign Windows 32bit bundle
         shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $exe = Get-ChildItem "src-tauri/target/i686-pc-windows-msvc/release/bundle/nsis/*.exe" | Select-Object -First 1
           Write-Host "Signing: $($exe.FullName)"
-          cargo tauri signer sign --private-key "$env:TAURI_SIGNING_PRIVATE_KEY" --password "" "$($exe.FullName)"
+          cargo tauri signer sign --private-key "$env:TAURI_SIGNING_PRIVATE_KEY" --password "$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$($exe.FullName)"
 
       - name: Rename installer (添加 32bit 后缀)
         shell: pwsh
