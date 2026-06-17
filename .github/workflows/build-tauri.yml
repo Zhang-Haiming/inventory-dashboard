@@ -47,6 +47,7 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: "-"
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
       - name: Debug - list bundle files
         run: find src-tauri/target/release/bundle -type f | sort
@@ -101,6 +102,7 @@ jobs:
         run: cargo tauri build --target x86_64-pc-windows-msvc --bundles nsis
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
       - name: Rename installer (添加 x64 后缀)
         shell: pwsh
@@ -165,6 +167,7 @@ jobs:
         run: cargo tauri build --target i686-pc-windows-msvc --bundles nsis
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
       - name: Rename installer (添加 32bit 后缀)
         shell: pwsh
