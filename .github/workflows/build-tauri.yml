@@ -278,7 +278,9 @@ jobs:
 
           def url(path):
               if not path: return ""
-              return f"{base}/{quote(os.path.basename(path))}"
+              # 只对空格编码，中文字符保持原样（GitHub CDN 正确处理 Unicode 文件名）
+              name = os.path.basename(path).replace(" ", "%20")
+              return f"{base}/{name}"
 
           mac   = find1("*.dmg")
           win64 = find1("*x64*.exe")
