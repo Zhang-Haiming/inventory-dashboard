@@ -27,3 +27,5 @@ tauri-plugin-dialog = "2.7.1"
 tauri-plugin-shell = "2.3.5"
 rusqlite = { version = "0.40.1", features = ["bundled"] }
 dotenvy = "0.15.7"
+tauri-plugin-updater = "2.10.1"
+tauri-plugin-process = "2.3.1"

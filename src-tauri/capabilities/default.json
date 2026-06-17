@@ -8,6 +8,8 @@
     "shell:allow-execute",
     "shell:allow-spawn",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

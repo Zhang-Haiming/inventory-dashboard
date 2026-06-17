@@ -9,6 +9,7 @@ import { StockInTable } from '@/components/tables/StockInTable'
 import { StockOutTable } from '@/components/tables/StockOutTable'
 import { GitHubConfigTab } from '@/components/modals/GitHubConfigTab'
 import { useInventoryData } from '@/hooks/useInventoryData'
+import { useUpdater } from '@/hooks/useUpdater'
 import { getCategoryInventory, getLowStockItems } from '@/lib/dataUtils'
 import type { Company } from '@/lib/types'
 
@@ -55,6 +56,9 @@ export default function App() {
     setCurrentCompany(cur)
     loadData()   // 重新加载新公司数据
   }, [companies, loadData])
+
+  // ---- 自动更新 ----
+  const { update, installing, progress, error: updateError, install, dismiss } = useUpdater()
 
   const lowStockCount = useMemo(() => {
     const inv = getCategoryInventory(stockIn, stockOut, thresholds)
@@ -115,6 +119,38 @@ export default function App() {
         parseAndImport={parseAndImport}
         pickAndImport={pickAndImport}
       />
+
+      {/* 更新提示横幅 */}
+      {update && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2.5 flex items-center justify-between">
+          <p className="text-sm text-blue-700">
+            🆕 发现新版本 <strong>{update.version}</strong>，当前版本 {update.currentVersion}
+          </p>
+          <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+            {installing ? (
+              <span className="text-sm text-blue-600">
+                下载中… {progress}%
+                <span className="ml-2 inline-block w-24 h-1.5 bg-blue-200 rounded-full overflow-hidden align-middle">
+                  <span className="block h-full bg-blue-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                </span>
+              </span>
+            ) : (
+              <>
+                {updateError && <span className="text-xs text-red-500">{updateError}</span>}
+                <button
+                  onClick={install}
+                  className="text-sm font-medium text-blue-700 hover:text-blue-900 underline"
+                >
+                  立即更新
+                </button>
+                <button onClick={dismiss} className="text-sm text-blue-400 hover:text-blue-600">
+                  稍后
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 pt-4">
