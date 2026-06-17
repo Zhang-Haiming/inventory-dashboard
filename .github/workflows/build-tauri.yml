@@ -48,6 +48,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: "-"
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
+      - name: Debug - list bundle files
+        run: find src-tauri/target/release/bundle -type f | sort
+
       - uses: actions/upload-artifact@v4
         with:
           name: mac-dmg
@@ -219,46 +222,51 @@ jobs:
           ls -lh dist/release/
 
       - name: Generate latest.json (updater manifest)
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          VERSION="${{ github.ref_name }}"
-          REPO="Zhang-Haiming/inventory-dashboard"
-          BASE="https://github.com/${REPO}/releases/download/${VERSION}"
-          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          python3 << 'EOF'
+          import json, os, glob, subprocess
+          from urllib.parse import quote
 
-          # 查找各平台文件名和签名
-          MAC_FILE=$(ls dist/release/*.dmg 2>/dev/null | head -1 | xargs basename)
-          WIN64_FILE=$(ls dist/release/*x64*.exe 2>/dev/null | head -1 | xargs basename)
-          WIN32_FILE=$(ls dist/release/*32bit*.exe 2>/dev/null | head -1 | xargs basename)
+          version = os.environ["TAG"]
+          base = f"https://github.com/Zhang-Haiming/inventory-dashboard/releases/download/{version}"
+          pub_date = subprocess.check_output(["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"]).decode().strip()
 
-          MAC_SIG=$(cat "dist/release/${MAC_FILE}.sig"   2>/dev/null || echo "")
-          WIN64_SIG=$(cat "dist/release/${WIN64_FILE}.sig" 2>/dev/null || echo "")
-          WIN32_SIG=$(cat "dist/release/${WIN32_FILE}.sig" 2>/dev/null || echo "")
+          def find1(pattern):
+              files = glob.glob(f"dist/release/{pattern}")
+              return files[0] if files else None
 
-          # 生成 latest.json
-          cat > dist/release/latest.json << EOF
-          {
-            "version": "${VERSION}",
+          def sig(path):
+              if not path: return ""
+              p = path + ".sig"
+              return open(p).read().strip() if os.path.exists(p) else ""
+
+          def url(path):
+              if not path: return ""
+              return f"{base}/{quote(os.path.basename(path))}"
+
+          mac   = find1("*.dmg")
+          win64 = find1("*x64*.exe")
+          win32 = find1("*32bit*.exe")
+
+          print(f"mac={mac}  win64={win64}  win32={win32}")
+          print("sig files:", glob.glob("dist/release/*.sig"))
+
+          data = {
+            "version": version,
             "notes": "查看 Release 页面了解更新内容",
-            "pub_date": "${PUB_DATE}",
+            "pub_date": pub_date,
             "platforms": {
-              "darwin-aarch64": {
-                "signature": "${MAC_SIG}",
-                "url": "${BASE}/${MAC_FILE}"
-              },
-              "windows-x86_64": {
-                "signature": "${WIN64_SIG}",
-                "url": "${BASE}/${WIN64_FILE}"
-              },
-              "windows-i686": {
-                "signature": "${WIN32_SIG}",
-                "url": "${BASE}/${WIN32_FILE}"
-              }
+              "darwin-aarch64":  {"signature": sig(mac),   "url": url(mac)},
+              "windows-x86_64":  {"signature": sig(win64), "url": url(win64)},
+              "windows-i686":    {"signature": sig(win32), "url": url(win32)},
             }
           }
+          with open("dist/release/latest.json", "w") as f:
+              json.dump(data, f, indent=2, ensure_ascii=False)
+          print(json.dumps(data, indent=2, ensure_ascii=False))
           EOF
-
-          echo "=== latest.json ==="
-          cat dist/release/latest.json
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
