@@ -49,8 +49,19 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
-      - name: Debug - list bundle files
-        run: find src-tauri/target/release/bundle -type f | sort
+      - name: Sign macOS bundle
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: |
+          DMG=$(find src-tauri/target/release/bundle/dmg -name "*.dmg" | head -1)
+          echo "Signing: $DMG"
+          cargo tauri signer sign \
+            --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
+            --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+            "$DMG"
+          echo "=== Files after signing ==="
+          ls -la src-tauri/target/release/bundle/dmg/
 
       - uses: actions/upload-artifact@v4
         with:
@@ -104,6 +115,17 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
+      - name: Sign Windows x64 bundle
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          $exe = Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe" | Select-Object -First 1
+          Write-Host "Signing: $($exe.FullName)"
+          cargo tauri signer sign --private-key "$env:TAURI_SIGNING_PRIVATE_KEY" --password "" "$($exe.FullName)"
+          Write-Host "=== Files after signing ==="
+          Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/"
+
       - name: Rename installer (添加 x64 后缀)
         shell: pwsh
         run: |
@@ -113,8 +135,7 @@ jobs:
             Rename-Item $_.FullName (Join-Path $_.Directory $newName)
           }
           Get-ChildItem "$dir/*.sig" | ForEach-Object {
-            $newName = $_.BaseName -replace '\.exe$','' + " x64.exe.sig"
-            Rename-Item $_.FullName (Join-Path $_.Directory $newName)
+            Rename-Item $_.FullName (Join-Path $_.Directory ($_.Name -replace '\.exe\.sig$',' x64.exe.sig'))
           }
 
       - uses: actions/upload-artifact@v4
@@ -169,6 +190,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
+      - name: Sign Windows 32bit bundle
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          $exe = Get-ChildItem "src-tauri/target/i686-pc-windows-msvc/release/bundle/nsis/*.exe" | Select-Object -First 1
+          Write-Host "Signing: $($exe.FullName)"
+          cargo tauri signer sign --private-key "$env:TAURI_SIGNING_PRIVATE_KEY" --password "" "$($exe.FullName)"
+
       - name: Rename installer (添加 32bit 后缀)
         shell: pwsh
         run: |
@@ -178,8 +208,7 @@ jobs:
             Rename-Item $_.FullName (Join-Path $_.Directory $newName)
           }
           Get-ChildItem "$dir/*.sig" | ForEach-Object {
-            $newName = $_.BaseName -replace '\.exe$','' + " 32bit.exe.sig"
-            Rename-Item $_.FullName (Join-Path $_.Directory $newName)
+            Rename-Item $_.FullName (Join-Path $_.Directory ($_.Name -replace '\.exe\.sig$',' 32bit.exe.sig'))
           }
 
       - uses: actions/upload-artifact@v4
