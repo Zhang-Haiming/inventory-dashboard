@@ -70,8 +70,9 @@ func SyncGitHub(args []string) error {
 	}
 
 	params := parseArgs(args)
-	dataFile := params["data-file"]
-	slug     := params["company-slug"]
+	dataFile    := params["data-file"]
+	slug        := params["company-slug"]
+	companyName := params["company-name"]
 	if dataFile == "" {
 		return fmt.Errorf("缺少 --data-file 参数")
 	}
@@ -119,12 +120,76 @@ func SyncGitHub(args []string) error {
 			return err
 		}
 	}
+
+	// 写入公司元数据（name/slug），供其他机器 pull 后统一公司名称
+	if companyName != "" {
+		metaJSON, _ := json.Marshal(map[string]string{"name": companyName, "slug": slug})
+		companyPath := "data/" + slug + "/company.json"
+		if err := client.putFile(companyPath, json.RawMessage(metaJSON), msg); err != nil {
+			return err
+		}
+
+		// 更新全局公司注册表 data/companies.json
+		if err := client.updateCompaniesRegistry(slug, companyName, msg); err != nil {
+			return fmt.Errorf("更新公司注册表失败: %w", err)
+		}
+	}
+
 	return nil
 }
 
-// PullFromGitHub 从 GH_DATA_BRANCH 拉取三个 JSON 文件，合并后输出到 stdout。
-// Rust 收到 stdout 后写入 SQLite。
-// 用法：pull --company-slug <slug>
+// SyncCompanyName 仅同步公司名称到远端，不动库存数据。
+// 用法：sync-name --slug <slug> --name <name>
+func SyncCompanyName(args []string) error {
+	env, err := loadGhEnv()
+	if err != nil {
+		return err
+	}
+	params := parseArgs(args)
+	slug := params["slug"]
+	name := params["name"]
+	if slug == "" {
+		return fmt.Errorf("缺少 --slug 参数")
+	}
+	if name == "" {
+		return fmt.Errorf("缺少 --name 参数")
+	}
+
+	client := &ghClient{ghEnv: env}
+	if err := client.ensureBranchExists(); err != nil {
+		return fmt.Errorf("确保 branch 存在失败: %w", err)
+	}
+
+	msg := fmt.Sprintf("🏢 更新公司名称 %s", time.Now().Format("2006-01-02"))
+
+	// 更新 data/{slug}/company.json
+	metaJSON, _ := json.Marshal(map[string]string{"name": name, "slug": slug})
+	if err := client.putFile("data/"+slug+"/company.json", json.RawMessage(metaJSON), msg); err != nil {
+		return fmt.Errorf("写入 company.json 失败: %w", err)
+	}
+
+	// 更新全局注册表
+	return client.updateCompaniesRegistry(slug, name, msg)
+}
+
+// companyEntry 是 data/companies.json 中每条记录的格式
+type companyEntry struct {
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+}
+
+// companyData 是单家公司的完整拉取结果
+type companyData struct {
+	Slug       string          `json:"slug"`
+	Name       string          `json:"name"`
+	StockIn    json.RawMessage `json:"stock_in"`
+	StockOut   json.RawMessage `json:"stock_out"`
+	Thresholds json.RawMessage `json:"thresholds"`
+}
+
+// PullFromGitHub 从 GH_DATA_BRANCH 拉取全部公司数据，输出到 stdout。
+// 优先读取 data/companies.json 获取公司列表；不存在则 fallback 到单公司模式。
+// 用法：pull --company-slug <slug>（仅在 companies.json 不存在时有效）
 func PullFromGitHub(args []string) error {
 	env, err := loadGhEnv()
 	if err != nil {
@@ -132,53 +197,52 @@ func PullFromGitHub(args []string) error {
 	}
 	client := &ghClient{ghEnv: env}
 
-	params := parseArgs(args)
-	slug := params["company-slug"]
-	if slug == "" {
-		slug = "default"
+	// 1. 读取全局公司注册表
+	var companies []companyEntry
+	registryContent, _ := client.getFileContent("data/companies.json")
+	if registryContent != nil {
+		_ = json.Unmarshal(registryContent, &companies)
 	}
 
-	type fileResult struct {
-		key     string
-		content json.RawMessage
-		err     error
+	// fallback：注册表不存在时，只拉当前公司（向后兼容旧仓库）
+	if len(companies) == 0 {
+		params := parseArgs(args)
+		slug := params["company-slug"]
+		if slug == "" {
+			slug = "default"
+		}
+		companies = []companyEntry{{Slug: slug}}
 	}
 
-	pathIn, pathOut, pathThr := dataPaths(slug)
-	paths := map[string]string{
-		"stock_in":   pathIn,
-		"stock_out":  pathOut,
-		"thresholds": pathThr,
+	// 2. 并行拉取每家公司的数据
+	type fetchResult struct {
+		idx  int
+		data companyData
+		err  error
+	}
+	ch := make(chan fetchResult, len(companies))
+
+	for i, co := range companies {
+		go func(idx int, co companyEntry) {
+			data, err := client.pullOneCompany(co.Slug, co.Name)
+			ch <- fetchResult{idx: idx, data: data, err: err}
+		}(i, co)
 	}
 
-	results := make(chan fileResult, len(paths))
-	for key, path := range paths {
-		go func(key, path string) {
-			content, err := client.getFileContent(path)
-			results <- fileResult{key: key, content: content, err: err}
-		}(key, path)
-	}
-
-	payload := make(map[string]json.RawMessage, 3)
-	for range paths {
-		r := <-results
+	results := make([]companyData, len(companies))
+	for range companies {
+		r := <-ch
 		if r.err != nil {
-			return fmt.Errorf("拉取 %s 失败: %w", r.key, r.err)
+			return r.err
 		}
-		if r.content == nil {
-			// 文件不存在，用空数组/对象兜底
-			switch r.key {
-			case "thresholds":
-				payload[r.key] = json.RawMessage("{}")
-			default:
-				payload[r.key] = json.RawMessage("[]")
-			}
-		} else {
-			payload[r.key] = r.content
-		}
+		results[r.idx] = r.data
 	}
 
-	return json.NewEncoder(os.Stdout).Encode(payload)
+	// 3. 输出 {companies:[...]} 供 Rust 解析
+	type pullOutput struct {
+		Companies []companyData `json:"companies"`
+	}
+	return json.NewEncoder(os.Stdout).Encode(pullOutput{Companies: results})
 }
 
 // ---- GitHub API 客户端 ----
@@ -369,4 +433,78 @@ func (c *ghClient) ensureBranchExists() error {
 		return fmt.Errorf("创建 branch 失败 %d: %s", resp2.StatusCode, b)
 	}
 	return nil
+}
+
+// pullOneCompany 并行拉取单家公司的三个数据文件
+func (c *ghClient) pullOneCompany(slug, name string) (companyData, error) {
+	pathIn, pathOut, pathThr := dataPaths(slug)
+
+	type fileResult struct {
+		key     string
+		content json.RawMessage
+		err     error
+	}
+	fileCh := make(chan fileResult, 3)
+
+	for _, kp := range []struct{ key, path string }{
+		{"stock_in", pathIn}, {"stock_out", pathOut}, {"thresholds", pathThr},
+	} {
+		go func(key, path string) {
+			content, ferr := c.getFileContent(path)
+			fileCh <- fileResult{key: key, content: content, err: ferr}
+		}(kp.key, kp.path)
+	}
+
+	files := make(map[string]json.RawMessage, 3)
+	for i := 0; i < 3; i++ {
+		r := <-fileCh
+		if r.err != nil {
+			return companyData{}, fmt.Errorf("拉取 %s/%s 失败: %w", slug, r.key, r.err)
+		}
+		if r.content == nil {
+			switch r.key {
+			case "thresholds":
+				files[r.key] = json.RawMessage("{}")
+			default:
+				files[r.key] = json.RawMessage("[]")
+			}
+		} else {
+			files[r.key] = r.content
+		}
+	}
+
+	return companyData{
+		Slug: slug, Name: name,
+		StockIn: files["stock_in"], StockOut: files["stock_out"], Thresholds: files["thresholds"],
+	}, nil
+}
+
+// updateCompaniesRegistry 读取并更新 data/companies.json（注册表）
+func (c *ghClient) updateCompaniesRegistry(slug, name, commitMsg string) error {
+	const registryPath = "data/companies.json"
+
+	existing, _ := c.getFileContent(registryPath) // 文件不存在时为 nil，忽略错误
+
+	var list []companyEntry
+	if existing != nil {
+		_ = json.Unmarshal(existing, &list)
+	}
+
+	found := false
+	for i, co := range list {
+		if co.Slug == slug {
+			list[i].Name = name
+			found = true
+			break
+		}
+	}
+	if !found {
+		list = append(list, companyEntry{Slug: slug, Name: name})
+	}
+
+	listJSON, err := json.Marshal(list)
+	if err != nil {
+		return err
+	}
+	return c.putFile(registryPath, json.RawMessage(listJSON), commitMsg)
 }

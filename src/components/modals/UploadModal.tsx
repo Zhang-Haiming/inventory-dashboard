@@ -1,4 +1,3 @@
-'use client'
 import { useState, useRef } from 'react'
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle } from 'lucide-react'
 import {
@@ -31,9 +30,6 @@ export function UploadModal({ open, onClose, onImport, parseAndImport }: Props) 
   const [dragging, setDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 判断是否是 Electron 环境
-  const isElectron = typeof window !== 'undefined' && window.navigator.userAgent.includes('Electron')
-
   const reset = () => {
     setState('idle'); setPreview(null); setErrorMsg('')
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -44,17 +40,16 @@ export function UploadModal({ open, onClose, onImport, parseAndImport }: Props) 
   const uploadFile = async (file: File) => {
     setState('uploading'); setErrorMsg('')
     try {
-      if (isElectron && parseAndImport) {
-        // Electron：前端直接解析，解析完直接导入（无需二次确认）
+      if (parseAndImport) {
+        // Tauri 应用：通过 invoke 调用 Go sidecar 解析，直接导入，无需二次确认
         const result = await parseAndImport(file)
-        // 直接关闭并显示结果
         reset()
         onClose()
         if (result.warnings.length > 0) {
           alert(`导入成功（入库 ${result.stockInCount} 条，出库 ${result.stockOutCount} 条）\n\n注意：\n${result.warnings.join('\n')}`)
         }
       } else {
-        // Web：走服务端 API
+        // Web fallback：走服务端 API，解析后展示预览供用户确认
         const formData = new FormData()
         formData.append('file', file)
         const res = await fetch('/api/upload', { method: 'POST', body: formData })

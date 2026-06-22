@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { GitHubConfig } from '@/lib/types'
 
-const EMPTY_CONFIG: GitHubConfig = { token: '', owner: '', repo: '', data_branch: 'tauri' }
+const EMPTY_CONFIG: GitHubConfig = { token: '', owner: '', repo: '', data_branch: '' }
 
 function toMsg(err: unknown): string {
   if (typeof err === 'string') return err
@@ -13,7 +13,7 @@ function toMsg(err: unknown): string {
   return '未知错误'
 }
 
-export function GitHubConfigTab() {
+export function GitHubConfigTab({ onSaved }: { onSaved?: () => void } = {}) {
   const [config,   setConfig]   = useState<GitHubConfig>(EMPTY_CONFIG)
   const [draft,    setDraft]    = useState<GitHubConfig>(EMPTY_CONFIG)
   const [showToken, setShowToken] = useState(false)
@@ -47,6 +47,7 @@ export function GitHubConfigTab() {
       await invoke('save_github_config', { config: draft })
       setConfig(draft)
       setStatus('saved')
+      onSaved?.()
       setTimeout(() => setStatus('idle'), 2500)
     } catch (e) {
       setErrMsg(toMsg(e))
@@ -156,11 +157,11 @@ export function GitHubConfigTab() {
           <Input
             value={draft.data_branch}
             onChange={e => setDraft(d => ({ ...d, data_branch: e.target.value }))}
-            placeholder="data-tauri"
+            placeholder="例如 main、data、data-backup"
             className="font-mono text-sm"
           />
           <p className="mt-1 text-xs text-slate-400">
-            数据文件存在哪个 branch（建议和代码分支分开，如 <code className="bg-slate-100 px-1 rounded">data-tauri</code>）
+            数据文件存在哪个 branch，建议与代码分支分开
           </p>
         </div>
 

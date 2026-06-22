@@ -67,6 +67,7 @@ pub fn run() {
             commands::rename_company,
             commands::delete_company,
             commands::switch_company,
+            commands::sync_company_name,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

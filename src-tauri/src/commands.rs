@@ -173,17 +173,20 @@ pub fn save_data(payload: InventoryPayload, db: State<'_, DbState>) -> Result<()
 pub async fn sync_github(app: tauri::AppHandle, db: State<'_, DbState>) -> Result<(), String> {
     use tauri_plugin_shell::ShellExt;
 
-    let (payload_json, slug) = {
+    let (payload_json, slug, company_name) = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         let company_id = db::get_current_company_id(&conn).map_err(|e| e.to_string())?;
         let slug = db::get_company_slug(&conn, &company_id)
             .map_err(|e| e.to_string())?
             .unwrap_or_else(|| "default".to_string());
+        let name = db::get_company_name(&conn, &company_id)
+            .map_err(|e| e.to_string())?
+            .unwrap_or_default();
         let stock_in   = db::read_stock_in(&conn, &company_id).map_err(|e| e.to_string())?;
         let stock_out  = db::read_stock_out(&conn, &company_id).map_err(|e| e.to_string())?;
         let thresholds = db::read_thresholds(&conn, &company_id).map_err(|e| e.to_string())?;
         let json = serde_json::json!({ "stock_in": stock_in, "stock_out": stock_out, "thresholds": thresholds });
-        (serde_json::to_vec(&json).map_err(|e| e.to_string())?, slug)
+        (serde_json::to_vec(&json).map_err(|e| e.to_string())?, slug, name)
     };
 
     let tmp_path = std::env::temp_dir().join("inventory_sync_data.json");
@@ -192,7 +195,8 @@ pub async fn sync_github(app: tauri::AppHandle, db: State<'_, DbState>) -> Resul
 
     let output = app
         .shell().sidecar("backend").map_err(|e| e.to_string())?
-        .args(["sync", "--data-file", &tmp_str, "--company-slug", &slug])
+        .args(["sync", "--data-file", &tmp_str, "--company-slug", &slug,
+               "--company-name", &company_name])
         .output().await.map_err(|e| e.to_string())?;
 
     let _ = std::fs::remove_file(&tmp_path);
@@ -204,18 +208,46 @@ pub async fn sync_github(app: tauri::AppHandle, db: State<'_, DbState>) -> Resul
     Ok(())
 }
 
+/// 仅将公司名称同步到 GitHub（不动库存数据）
+#[tauri::command]
+pub async fn sync_company_name(id: String, app: tauri::AppHandle, db: State<'_, DbState>) -> Result<(), String> {
+    use tauri_plugin_shell::ShellExt;
+
+    let (slug, name) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let slug = db::get_company_slug(&conn, &id)
+            .map_err(|e| e.to_string())?
+            .unwrap_or_else(|| id.clone());
+        let name = db::get_company_name(&conn, &id)
+            .map_err(|e| e.to_string())?
+            .unwrap_or_default();
+        (slug, name)
+    };
+
+    let output = app
+        .shell().sidecar("backend").map_err(|e| e.to_string())?
+        .args(["sync-name", "--slug", &slug, "--name", &name])
+        .output().await.map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("同步公司名称失败: {}", stderr));
+    }
+    Ok(())
+}
+
 /// 从 GitHub 拉取当前公司数据（data/{slug}/ 子目录）
 #[tauri::command]
 pub async fn pull_from_github(app: tauri::AppHandle, db: State<'_, DbState>) -> Result<(), String> {
     use tauri_plugin_shell::ShellExt;
 
-    let (company_id, slug) = {
+    // slug 仅用于 fallback：当远端没有 companies.json 时，Go 会只拉这一家
+    let slug = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         let id = db::get_current_company_id(&conn).map_err(|e| e.to_string())?;
-        let slug = db::get_company_slug(&conn, &id)
+        db::get_company_slug(&conn, &id)
             .map_err(|e| e.to_string())?
-            .unwrap_or_else(|| "default".to_string());
-        (id, slug)
+            .unwrap_or_else(|| "default".to_string())
     };
 
     let output = app
@@ -228,21 +260,57 @@ pub async fn pull_from_github(app: tauri::AppHandle, db: State<'_, DbState>) -> 
         return Err(format!("拉取失败: {}", stderr));
     }
 
+    // ---- 解析 Go sidecar 输出（多公司格式）----
     #[derive(Deserialize)]
-    struct PullPayload {
+    struct RemoteCompany {
+        slug:       String,
+        name:       String,
         stock_in:   Vec<StockInRow>,
         stock_out:  Vec<StockOutRow>,
         thresholds: HashMap<String, i64>,
     }
+    #[derive(Deserialize)]
+    struct PullAllPayload {
+        companies: Vec<RemoteCompany>,
+    }
 
     let stdout = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
-    let pulled: PullPayload = serde_json::from_str(&stdout).map_err(|e| e.to_string())?;
+    let pulled: PullAllPayload = serde_json::from_str(&stdout).map_err(|e| e.to_string())?;
 
     let conn = db.0.lock().map_err(|e| e.to_string())?;
-    db::clear_company(&conn, &company_id).map_err(|e| e.to_string())?;
-    db::upsert_stock_in(&conn, &company_id, &pulled.stock_in).map_err(|e| e.to_string())?;
-    db::upsert_stock_out(&conn, &company_id, &pulled.stock_out).map_err(|e| e.to_string())?;
-    db::upsert_thresholds(&conn, &company_id, &pulled.thresholds).map_err(|e| e.to_string())?;
+
+    for remote in pulled.companies {
+        // 按 slug 查找本地公司
+        let local = db::get_company_by_slug(&conn, &remote.slug)
+            .map_err(|e| e.to_string())?;
+
+        let local_id = match local {
+            Some(ref c) => {
+                // 名称不同时更新（远端为准）
+                if !remote.name.is_empty() && c.name != remote.name {
+                    let _ = db::rename_company(&conn, &c.id, &remote.name);
+                }
+                c.id.clone()
+            }
+            None => {
+                // 本地没有此公司：以 slug 为 id 创建（保证两端 slug 一致）
+                let new_company = Company {
+                    id:   remote.slug.clone(),
+                    name: remote.name.clone(),
+                    slug: remote.slug.clone(),
+                };
+                db::insert_company(&conn, &new_company).map_err(|e| e.to_string())?;
+                remote.slug.clone()
+            }
+        };
+
+        // 全量覆盖写入（pull = 远端数据替换本地）
+        db::clear_company(&conn, &local_id).map_err(|e| e.to_string())?;
+        db::upsert_stock_in(&conn, &local_id, &remote.stock_in).map_err(|e| e.to_string())?;
+        db::upsert_stock_out(&conn, &local_id, &remote.stock_out).map_err(|e| e.to_string())?;
+        db::upsert_thresholds(&conn, &local_id, &remote.thresholds).map_err(|e| e.to_string())?;
+    }
+
     db::set_meta(&conn, "last_updated", &chrono_now()).map_err(|e| e.to_string())?;
     Ok(())
 }

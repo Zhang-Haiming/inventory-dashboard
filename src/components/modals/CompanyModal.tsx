@@ -47,6 +47,10 @@ export function CompanyModal({ open, onClose, companies, currentId, onSwitch, on
       setEditId(null)
       setErr('')
       onRefresh()
+      // 改名后异步同步到 GitHub（不阻塞 UI，失败仅提示）
+      invoke('sync_company_name', { id }).catch(e => {
+        setErr(`本地改名成功，远端同步失败：${toMsg(e)}`)
+      })
     } catch (e) { setErr(toMsg(e)) }
   }
 

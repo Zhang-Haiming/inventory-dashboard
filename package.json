@@ -7,7 +7,7 @@
     "build:frontend": "vite build",
     "dev": "cargo tauri dev",
     "build": "cargo tauri build",
-    "build:backend": "cd backend && go build -o ../src-tauri/binaries/backend-$(go env GOOS)-$(go env GOARCH) ."
+    "build:backend": "cd backend && go build -o \"../src-tauri/binaries/backend-$(rustc -vV | grep '^host:' | awk '{print $2}')\" ."
   },
   "build": {
     "appId": "com.internal.inventory-dashboard",

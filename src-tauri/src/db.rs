@@ -121,6 +121,20 @@ pub fn get_company_slug(conn: &Connection, id: &str) -> Result<Option<String>> {
     ).optional()
 }
 
+pub fn get_company_name(conn: &Connection, id: &str) -> Result<Option<String>> {
+    conn.query_row(
+        "SELECT name FROM companies WHERE id = ?1",
+        params![id], |r| r.get(0),
+    ).optional()
+}
+
+pub fn get_company_by_slug(conn: &Connection, slug: &str) -> Result<Option<crate::commands::Company>> {
+    conn.query_row(
+        "SELECT id, name, slug FROM companies WHERE slug = ?1",
+        params![slug], |r| Ok(crate::commands::Company { id: r.get(0)?, name: r.get(1)?, slug: r.get(2)? }),
+    ).optional()
+}
+
 pub fn get_current_company_id(conn: &Connection) -> Result<String> {
     Ok(get_meta(conn, "current_company_id")?.unwrap_or_else(|| "default".to_string()))
 }

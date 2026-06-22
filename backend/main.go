@@ -46,6 +46,10 @@ func main() {
 		err := handlers.PullFromGitHub(os.Args[2:])
 		exitOnErr(err, "pull")
 
+	case "sync-name":
+		err := handlers.SyncCompanyName(os.Args[2:])
+		exitOnErr(err, "sync-name")
+
 	default:
 		fmt.Fprintf(os.Stderr, "未知子命令: %s\n", os.Args[1])
 		os.Exit(1)

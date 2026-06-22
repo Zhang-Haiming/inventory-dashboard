@@ -1,25 +1,24 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { BarChart2, Package, AlertTriangle, ListOrdered, PackageOpen, Settings2 } from 'lucide-react'
+import { BarChart2, Package, AlertTriangle, ListOrdered, PackageOpen } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { MonthlySummary } from '@/components/dashboard/MonthlySummary'
 import { CategoryInventory } from '@/components/dashboard/CategoryInventory'
 import { LowStockAlert } from '@/components/dashboard/LowStockAlert'
 import { StockInTable } from '@/components/tables/StockInTable'
 import { StockOutTable } from '@/components/tables/StockOutTable'
-import { GitHubConfigTab } from '@/components/modals/GitHubConfigTab'
+import { GitHubSetupModal } from '@/components/modals/GitHubSetupModal'
 import { useInventoryData } from '@/hooks/useInventoryData'
 import { useUpdater } from '@/hooks/useUpdater'
 import { getCategoryInventory, getLowStockItems } from '@/lib/dataUtils'
-import type { Company } from '@/lib/types'
+import type { Company, GitHubConfig } from '@/lib/types'
 
 const TABS = [
-  { id: 'summary',   label: '月度统计',   icon: BarChart2 },
-  { id: 'inventory', label: '商品库存',   icon: Package },
-  { id: 'alerts',    label: '库存预警',   icon: AlertTriangle },
-  { id: 'stockin',   label: '入库记录',   icon: ListOrdered },
-  { id: 'stockout',  label: '出库记录',   icon: PackageOpen },
-  { id: 'github',    label: 'GitHub 配置', icon: Settings2 },
+  { id: 'summary',   label: '月度统计', icon: BarChart2 },
+  { id: 'inventory', label: '商品库存', icon: Package },
+  { id: 'alerts',    label: '库存预警', icon: AlertTriangle },
+  { id: 'stockin',   label: '入库记录', icon: ListOrdered },
+  { id: 'stockout',  label: '出库记录', icon: PackageOpen },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -57,6 +56,38 @@ export default function App() {
     loadData()   // 重新加载新公司数据
   }, [companies, loadData])
 
+  // ---- GitHub 配置弹窗 ----
+  const [githubModalOpen, setGithubModalOpen] = useState(false)
+  const [isFirstLaunch,   setIsFirstLaunch]   = useState(false)
+
+  // 首次启动时检测 GitHub 配置，若未配置则自动弹出引导弹窗
+  useEffect(() => {
+    invoke<GitHubConfig>('get_github_config')
+      .then(cfg => {
+        if (!cfg.token || !cfg.owner || !cfg.repo) {
+          setIsFirstLaunch(true)
+          setGithubModalOpen(true)
+        }
+      })
+      .catch(() => {
+        // 无法读取配置（首次安装等），同样弹出引导
+        setIsFirstLaunch(true)
+        setGithubModalOpen(true)
+      })
+  }, [])
+
+  // pull 完后同时刷新公司列表（pull 可能更新了本机的公司名称）
+  const handleRefresh = useCallback(async () => {
+    await refreshFromGitHub()
+    await loadCompanies()
+  }, [refreshFromGitHub, loadCompanies])
+
+  // 配置保存后：关闭首次引导标记，自动从 GitHub 拉取数据
+  const handleGithubSaved = useCallback(() => {
+    setIsFirstLaunch(false)
+    handleRefresh()
+  }, [handleRefresh])
+
   // ---- 自动更新 ----
   const { update, installing, progress, error: updateError, install, dismiss } = useUpdater()
 
@@ -85,11 +116,12 @@ export default function App() {
           lowStockCount={0}
           companies={companies} currentCompany={currentCompany}
           onSwitchCompany={handleSwitchCompany} onRefreshCompanies={loadCompanies}
-          onSave={saveToGitHub} onRefresh={refreshFromGitHub}
+          onSave={saveToGitHub} onRefresh={handleRefresh}
           onImport={importFromUpload} onExport={handleExport}
           onThresholdsSave={setThresholds}
           parseAndImport={parseAndImport}
           pickAndImport={pickAndImport}
+          onOpenGitHubConfig={() => setGithubModalOpen(true)}
         />
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
@@ -100,6 +132,13 @@ export default function App() {
             点击右上角「上传 Excel」按钮，上传包含入库表和出库表的 Excel 文件开始使用
           </p>
         </div>
+
+      <GitHubSetupModal
+        open={githubModalOpen}
+        onClose={() => setGithubModalOpen(false)}
+        onSaved={handleGithubSaved}
+        isFirstLaunch={isFirstLaunch}
+      />
       </div>
     )
   }
@@ -118,6 +157,7 @@ export default function App() {
         onThresholdsSave={setThresholds}
         parseAndImport={parseAndImport}
         pickAndImport={pickAndImport}
+        onOpenGitHubConfig={() => setGithubModalOpen(true)}
       />
 
       {/* 更新提示横幅 */}
@@ -206,7 +246,7 @@ export default function App() {
               <StockOutTable rows={stockOut}
                 onUpdate={updateStockOutRow} onDelete={deleteStockOutRow} onAdd={addStockOutRow} />
             )}
-            {activeTab === 'github' && <GitHubConfigTab />}
+
           </div>
         </div>
       )}
@@ -219,6 +259,13 @@ export default function App() {
           </button>
         </div>
       )}
+
+      <GitHubSetupModal
+        open={githubModalOpen}
+        onClose={() => setGithubModalOpen(false)}
+        onSaved={handleGithubSaved}
+        isFirstLaunch={isFirstLaunch}
+      />
     </div>
   )
 }

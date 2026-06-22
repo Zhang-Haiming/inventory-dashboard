@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Upload, Download, Save, BarChart2, RefreshCw, Settings, AlertTriangle, ChevronDown, Settings2 } from 'lucide-react'
+import { Upload, Download, Save, BarChart2, RefreshCw, Settings, AlertTriangle, ChevronDown, Settings2, GitBranch } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { UploadModal } from '@/components/modals/UploadModal'
 import { ThresholdModal } from '@/components/modals/ThresholdModal'
@@ -28,6 +28,7 @@ interface Props {
   onThresholdsSave: (thresholds: Thresholds) => void
   parseAndImport: (file: File) => Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number }>
   pickAndImport: () => Promise<{ warnings: string[]; stockInCount: number; stockOutCount: number } | null>
+  onOpenGitHubConfig: () => void
 }
 
 export function Header({
@@ -35,7 +36,7 @@ export function Header({
   stockIn, stockOut, thresholds, lowStockCount,
   companies, currentCompany, onSwitchCompany, onRefreshCompanies,
   onSave, onRefresh, onImport, onExport, onThresholdsSave,
-  parseAndImport, pickAndImport,
+  parseAndImport, pickAndImport, onOpenGitHubConfig,
 }: Props) {
   const [uploadOpen,    setUploadOpen]    = useState(false)
   const [thresholdOpen, setThresholdOpen] = useState(false)
@@ -61,14 +62,16 @@ export function Header({
   const handleUploadClick = async () => {
     try {
       const result = await pickAndImport()
-      if (result === null) return
+      if (result === null) return   // 用户取消选择，静默退出
       if (result.warnings.length > 0) {
         alert(`导入成功（入库 ${result.stockInCount} 条，出库 ${result.stockOutCount} 条）\n\n注意：\n${result.warnings.join('\n')}`)
       } else {
         alert(`导入成功！入库 ${result.stockInCount} 条，出库 ${result.stockOutCount} 条`)
       }
-    } catch {
-      setUploadOpen(true)
+    } catch (err) {
+      // 解析失败时显示错误，不再弹出上传 Modal（避免触发额外窗口）
+      const msg = typeof err === 'string' ? err : err instanceof Error ? err.message : '导入失败'
+      alert(`导入失败：${msg}`)
     }
   }
 
@@ -155,6 +158,11 @@ export function Header({
           <Button variant="outline" size="sm" onClick={() => setThresholdOpen(true)} title="预警阈值设置">
             <Settings className="h-4 w-4" />
             <span className="hidden sm:inline ml-1">预警设置</span>
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={onOpenGitHubConfig} title="GitHub 同步配置">
+            <GitBranch className="h-4 w-4" />
+            <span className="hidden sm:inline ml-1">GitHub 配置</span>
           </Button>
 
           <Button
